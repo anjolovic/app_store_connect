@@ -18,6 +18,8 @@ require_relative 'client/releases'
 require_relative 'client/test_flight'
 require_relative 'client/pricing'
 require_relative 'client/users'
+require_relative 'client/screenshots'
+require_relative 'client/privacy'
 
 module AppStoreConnect
   # App Store Connect API client for checking app status, review submissions,
@@ -57,6 +59,8 @@ module AppStoreConnect
     include TestFlight
     include Pricing
     include Users
+    include Screenshots
+    include Privacy
 
     def initialize(
       key_id: nil,
