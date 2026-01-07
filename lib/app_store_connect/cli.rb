@@ -14,8 +14,11 @@ module AppStoreConnect
   #
   class CLI
     COMMANDS = %w[status review subs subscriptions builds apps ready help
-                  review-info update-review-notes cancel-review submit
+                  review-info update-review-notes cancel-review submit create-review-detail
                   sub-details update-sub-description version-info update-whats-new
+                  description update-description keywords update-keywords
+                  urls update-marketing-url update-support-url
+                  update-promotional-text update-privacy-url
                   iaps iap-details update-iap-note update-iap-description submit-iap
                   customer-reviews respond-review
                   upload-iap-screenshot delete-iap-screenshot
@@ -306,14 +309,74 @@ module AppStoreConnect
       detail = client.app_store_review_detail(version_id: version_id)
 
       unless detail
-        puts "\e[31mNo review detail found for this version.\e[0m"
-        exit 1
+        # Auto-create review detail if it doesn't exist
+        puts "\e[33mNo review detail found, creating one...\e[0m"
+        result = client.create_app_store_review_detail(version_id: version_id, notes: notes)
+        puts "\e[32mReview detail created with notes!\e[0m"
+        puts "  Version: #{active_version.dig('attributes', 'versionString')}"
+        puts "  Notes: #{notes}"
+        return
       end
 
       client.update_app_store_review_detail(detail_id: detail[:id], notes: notes)
       puts "\e[32mReview notes updated successfully!\e[0m"
       puts "  Version: #{active_version.dig('attributes', 'versionString')}"
       puts "  Notes: #{notes}"
+    end
+
+    def cmd_create_review_detail
+      versions = client.app_store_versions
+      active_version = versions.find { |v| v.dig('attributes', 'appStoreState') == 'WAITING_FOR_REVIEW' }
+      active_version ||= versions.find { |v| v.dig('attributes', 'appStoreState') == 'PREPARE_FOR_SUBMISSION' }
+
+      unless active_version
+        puts "\e[31mNo active version found.\e[0m"
+        exit 1
+      end
+
+      version_id = active_version['id']
+      version_string = active_version.dig('attributes', 'versionString')
+
+      # Check if review detail already exists
+      existing = client.app_store_review_detail(version_id: version_id)
+      if existing
+        puts "\e[33mReview detail already exists for version #{version_string}.\e[0m"
+        puts "  Detail ID: #{existing[:id]}"
+        puts "  Notes: #{existing[:notes] || '(none)'}"
+        return
+      end
+
+      # Parse optional arguments
+      notes = nil
+      contact_email = nil
+      demo_account_name = nil
+      demo_account_password = nil
+
+      @options.each_with_index do |opt, i|
+        case opt
+        when '--notes'
+          notes = @options[i + 1]
+        when '--email'
+          contact_email = @options[i + 1]
+        when '--demo-user'
+          demo_account_name = @options[i + 1]
+        when '--demo-pass'
+          demo_account_password = @options[i + 1]
+        end
+      end
+
+      result = client.create_app_store_review_detail(
+        version_id: version_id,
+        notes: notes,
+        contact_email: contact_email,
+        demo_account_name: demo_account_name,
+        demo_account_password: demo_account_password
+      )
+
+      puts "\e[32mReview detail created!\e[0m"
+      puts "  Version: #{version_string}"
+      puts "  Detail ID: #{result[:id]}"
+      puts "  Notes: #{notes || '(none)'}"
     end
 
     def cmd_cancel_review
@@ -496,10 +559,397 @@ module AppStoreConnect
         exit 1
       end
 
-      client.update_app_store_version_localization(localization_id: en_loc[:id], whats_new: whats_new)
-      puts "\e[32mUpdated \"What's New\" text!\e[0m"
+      begin
+        client.update_app_store_version_localization(localization_id: en_loc[:id], whats_new: whats_new)
+        puts "\e[32mUpdated \"What's New\" text!\e[0m"
+        puts "  Version: #{active_version.dig('attributes', 'versionString')}"
+        puts "  What's New: #{whats_new}"
+      rescue ApiError => e
+        if e.message.include?('cannot be edited') || e.message.include?('409')
+          # Check if this is the first version (no previous versions in READY_FOR_SALE)
+          released_versions = versions.select { |v| v.dig('attributes', 'appStoreState') == 'READY_FOR_SALE' }
+          if released_versions.empty?
+            puts "\e[33mCannot update \"What's New\" for the initial app release.\e[0m"
+            puts
+            puts 'The "What\'s New" field is only available for app updates, not the first version.'
+            puts 'This field will become available when you submit your first update.'
+          else
+            puts "\e[31mCannot update \"What's New\" at this time.\e[0m"
+            puts "The version may be in a state that doesn't allow edits."
+          end
+          exit 1
+        else
+          raise
+        end
+      end
+    end
+
+    def cmd_description
+      locale = @options.first || 'en-US'
+
+      puts "\e[1mApp Description\e[0m"
+      puts '=' * 50
+      puts
+
+      versions = client.app_store_versions
+      active_version = versions.find { |v| v.dig('attributes', 'appStoreState') == 'WAITING_FOR_REVIEW' }
+      active_version ||= versions.find { |v| v.dig('attributes', 'appStoreState') == 'PREPARE_FOR_SUBMISSION' }
+      active_version ||= versions.first
+
+      unless active_version
+        puts 'No versions found.'
+        return
+      end
+
+      version_id = active_version['id']
+      version_string = active_version.dig('attributes', 'versionString')
+      state = active_version.dig('attributes', 'appStoreState')
+
+      puts "\e[1mVersion:\e[0m #{version_string} (#{state})"
+      puts
+
+      locs = client.app_store_version_localizations(version_id: version_id)
+
+      if @options.first
+        # Show specific locale
+        loc = locs.find { |l| l[:locale] == locale }
+        unless loc
+          puts "\e[31mLocale not found: #{locale}\e[0m"
+          puts "Available: #{locs.map { |l| l[:locale] }.join(', ')}"
+          return
+        end
+
+        puts "\e[1m#{loc[:locale]}:\e[0m"
+        puts loc[:description] || '(no description)'
+      else
+        # Show all locales
+        locs.each do |loc|
+          puts "\e[1m#{loc[:locale]}:\e[0m"
+          puts loc[:description] || '(no description)'
+          puts
+        end
+      end
+    end
+
+    def cmd_update_description
+      if @options.length < 2
+        puts "\e[31mUsage: asc update-description <locale> \"Your app description\"\e[0m"
+        puts 'Example: asc update-description en-US "My awesome app does amazing things..."'
+        puts
+        puts 'Tip: For multi-line descriptions, use a file:'
+        puts '  asc update-description en-US "$(cat description.txt)"'
+        exit 1
+      end
+
+      locale = @options[0]
+      description = @options[1..].join(' ')
+
+      versions = client.app_store_versions
+      active_version = versions.find { |v| v.dig('attributes', 'appStoreState') == 'WAITING_FOR_REVIEW' }
+      active_version ||= versions.find { |v| v.dig('attributes', 'appStoreState') == 'PREPARE_FOR_SUBMISSION' }
+
+      unless active_version
+        puts "\e[31mNo active version found to update.\e[0m"
+        exit 1
+      end
+
+      version_id = active_version['id']
+      locs = client.app_store_version_localizations(version_id: version_id)
+      loc = locs.find { |l| l[:locale] == locale }
+
+      unless loc
+        puts "\e[31mLocale not found: #{locale}\e[0m"
+        puts "Available: #{locs.map { |l| l[:locale] }.join(', ')}"
+        exit 1
+      end
+
+      client.update_app_store_version_localization(localization_id: loc[:id], description: description)
+      puts "\e[32mDescription updated!\e[0m"
       puts "  Version: #{active_version.dig('attributes', 'versionString')}"
-      puts "  What's New: #{whats_new}"
+      puts "  Locale: #{locale}"
+      puts "  Description: #{description[0..100]}#{'...' if description.length > 100}"
+    end
+
+    def cmd_keywords
+      locale = @options.first
+
+      puts "\e[1mApp Keywords\e[0m"
+      puts '=' * 50
+      puts
+
+      versions = client.app_store_versions
+      active_version = versions.find { |v| v.dig('attributes', 'appStoreState') == 'WAITING_FOR_REVIEW' }
+      active_version ||= versions.find { |v| v.dig('attributes', 'appStoreState') == 'PREPARE_FOR_SUBMISSION' }
+      active_version ||= versions.first
+
+      unless active_version
+        puts 'No versions found.'
+        return
+      end
+
+      version_id = active_version['id']
+      version_string = active_version.dig('attributes', 'versionString')
+      state = active_version.dig('attributes', 'appStoreState')
+
+      puts "\e[1mVersion:\e[0m #{version_string} (#{state})"
+      puts
+
+      locs = client.app_store_version_localizations(version_id: version_id)
+
+      if locale
+        # Show specific locale
+        loc = locs.find { |l| l[:locale] == locale }
+        unless loc
+          puts "\e[31mLocale not found: #{locale}\e[0m"
+          puts "Available: #{locs.map { |l| l[:locale] }.join(', ')}"
+          return
+        end
+
+        puts "\e[1m#{loc[:locale]}:\e[0m"
+        puts loc[:keywords] || '(no keywords)'
+      else
+        # Show all locales
+        locs.each do |loc|
+          puts "\e[1m#{loc[:locale]}:\e[0m #{loc[:keywords] || '(no keywords)'}"
+        end
+      end
+    end
+
+    def cmd_update_keywords
+      if @options.length < 2
+        puts "\e[31mUsage: asc update-keywords <locale> \"keyword1, keyword2, keyword3\"\e[0m"
+        puts 'Example: asc update-keywords en-US "productivity, notes, organizer"'
+        puts
+        puts 'Note: Keywords are comma-separated and have a 100 character limit.'
+        exit 1
+      end
+
+      locale = @options[0]
+      keywords = @options[1..].join(' ')
+
+      if keywords.length > 100
+        puts "\e[33mWarning: Keywords exceed 100 characters (#{keywords.length} chars)\e[0m"
+      end
+
+      versions = client.app_store_versions
+      active_version = versions.find { |v| v.dig('attributes', 'appStoreState') == 'WAITING_FOR_REVIEW' }
+      active_version ||= versions.find { |v| v.dig('attributes', 'appStoreState') == 'PREPARE_FOR_SUBMISSION' }
+
+      unless active_version
+        puts "\e[31mNo active version found to update.\e[0m"
+        exit 1
+      end
+
+      version_id = active_version['id']
+      locs = client.app_store_version_localizations(version_id: version_id)
+      loc = locs.find { |l| l[:locale] == locale }
+
+      unless loc
+        puts "\e[31mLocale not found: #{locale}\e[0m"
+        puts "Available: #{locs.map { |l| l[:locale] }.join(', ')}"
+        exit 1
+      end
+
+      client.update_app_store_version_localization(localization_id: loc[:id], keywords: keywords)
+      puts "\e[32mKeywords updated!\e[0m"
+      puts "  Version: #{active_version.dig('attributes', 'versionString')}"
+      puts "  Locale: #{locale}"
+      puts "  Keywords: #{keywords}"
+    end
+
+    def cmd_urls
+      locale = @options.first
+
+      puts "\e[1mApp URLs\e[0m"
+      puts '=' * 50
+      puts
+
+      versions = client.app_store_versions
+      active_version = versions.find { |v| v.dig('attributes', 'appStoreState') == 'WAITING_FOR_REVIEW' }
+      active_version ||= versions.find { |v| v.dig('attributes', 'appStoreState') == 'PREPARE_FOR_SUBMISSION' }
+      active_version ||= versions.first
+
+      unless active_version
+        puts 'No versions found.'
+        return
+      end
+
+      version_id = active_version['id']
+      version_string = active_version.dig('attributes', 'versionString')
+      state = active_version.dig('attributes', 'appStoreState')
+
+      puts "\e[1mVersion:\e[0m #{version_string} (#{state})"
+      puts
+
+      locs = client.app_store_version_localizations(version_id: version_id)
+
+      if locale
+        # Show specific locale
+        loc = locs.find { |l| l[:locale] == locale }
+        unless loc
+          puts "\e[31mLocale not found: #{locale}\e[0m"
+          puts "Available: #{locs.map { |l| l[:locale] }.join(', ')}"
+          return
+        end
+
+        puts "\e[1m#{loc[:locale]}:\e[0m"
+        puts "  Marketing URL: #{loc[:marketing_url] || '(not set)'}"
+        puts "  Support URL: #{loc[:support_url] || '(not set)'}"
+      else
+        # Show all locales
+        locs.each do |loc|
+          puts "\e[1m#{loc[:locale]}:\e[0m"
+          puts "  Marketing URL: #{loc[:marketing_url] || '(not set)'}"
+          puts "  Support URL: #{loc[:support_url] || '(not set)'}"
+          puts
+        end
+      end
+    end
+
+    def cmd_update_marketing_url
+      if @options.length < 2
+        puts "\e[31mUsage: asc update-marketing-url <locale> <url>\e[0m"
+        puts 'Example: asc update-marketing-url en-US https://example.com/app'
+        exit 1
+      end
+
+      locale = @options[0]
+      url = @options[1]
+
+      versions = client.app_store_versions
+      active_version = versions.find { |v| v.dig('attributes', 'appStoreState') == 'WAITING_FOR_REVIEW' }
+      active_version ||= versions.find { |v| v.dig('attributes', 'appStoreState') == 'PREPARE_FOR_SUBMISSION' }
+
+      unless active_version
+        puts "\e[31mNo active version found to update.\e[0m"
+        exit 1
+      end
+
+      version_id = active_version['id']
+      locs = client.app_store_version_localizations(version_id: version_id)
+      loc = locs.find { |l| l[:locale] == locale }
+
+      unless loc
+        puts "\e[31mLocale not found: #{locale}\e[0m"
+        puts "Available: #{locs.map { |l| l[:locale] }.join(', ')}"
+        exit 1
+      end
+
+      client.update_app_store_version_localization(localization_id: loc[:id], marketing_url: url)
+      puts "\e[32mMarketing URL updated!\e[0m"
+      puts "  Version: #{active_version.dig('attributes', 'versionString')}"
+      puts "  Locale: #{locale}"
+      puts "  Marketing URL: #{url}"
+    end
+
+    def cmd_update_support_url
+      if @options.length < 2
+        puts "\e[31mUsage: asc update-support-url <locale> <url>\e[0m"
+        puts 'Example: asc update-support-url en-US https://example.com/support'
+        exit 1
+      end
+
+      locale = @options[0]
+      url = @options[1]
+
+      versions = client.app_store_versions
+      active_version = versions.find { |v| v.dig('attributes', 'appStoreState') == 'WAITING_FOR_REVIEW' }
+      active_version ||= versions.find { |v| v.dig('attributes', 'appStoreState') == 'PREPARE_FOR_SUBMISSION' }
+
+      unless active_version
+        puts "\e[31mNo active version found to update.\e[0m"
+        exit 1
+      end
+
+      version_id = active_version['id']
+      locs = client.app_store_version_localizations(version_id: version_id)
+      loc = locs.find { |l| l[:locale] == locale }
+
+      unless loc
+        puts "\e[31mLocale not found: #{locale}\e[0m"
+        puts "Available: #{locs.map { |l| l[:locale] }.join(', ')}"
+        exit 1
+      end
+
+      client.update_app_store_version_localization(localization_id: loc[:id], support_url: url)
+      puts "\e[32mSupport URL updated!\e[0m"
+      puts "  Version: #{active_version.dig('attributes', 'versionString')}"
+      puts "  Locale: #{locale}"
+      puts "  Support URL: #{url}"
+    end
+
+    def cmd_update_promotional_text
+      if @options.length < 2
+        puts "\e[31mUsage: asc update-promotional-text <locale> \"Your promotional text\"\e[0m"
+        puts 'Example: asc update-promotional-text en-US "New feature: Dark mode!"'
+        puts
+        puts 'Note: Promotional text can be updated without submitting a new version.'
+        exit 1
+      end
+
+      locale = @options[0]
+      promotional_text = @options[1..].join(' ')
+
+      versions = client.app_store_versions
+      active_version = versions.find { |v| v.dig('attributes', 'appStoreState') == 'READY_FOR_SALE' }
+      active_version ||= versions.find { |v| v.dig('attributes', 'appStoreState') == 'WAITING_FOR_REVIEW' }
+      active_version ||= versions.find { |v| v.dig('attributes', 'appStoreState') == 'PREPARE_FOR_SUBMISSION' }
+
+      unless active_version
+        puts "\e[31mNo active version found to update.\e[0m"
+        exit 1
+      end
+
+      version_id = active_version['id']
+      locs = client.app_store_version_localizations(version_id: version_id)
+      loc = locs.find { |l| l[:locale] == locale }
+
+      unless loc
+        puts "\e[31mLocale not found: #{locale}\e[0m"
+        puts "Available: #{locs.map { |l| l[:locale] }.join(', ')}"
+        exit 1
+      end
+
+      client.update_app_store_version_localization(localization_id: loc[:id], promotional_text: promotional_text)
+      puts "\e[32mPromotional text updated!\e[0m"
+      puts "  Version: #{active_version.dig('attributes', 'versionString')}"
+      puts "  Locale: #{locale}"
+      puts "  Promotional Text: #{promotional_text}"
+    end
+
+    def cmd_update_privacy_url
+      if @options.length < 2
+        puts "\e[31mUsage: asc update-privacy-url <locale> <url>\e[0m"
+        puts 'Example: asc update-privacy-url en-US https://example.com/privacy'
+        exit 1
+      end
+
+      locale = @options[0]
+      url = @options[1]
+
+      # Privacy URL is in appInfoLocalizations, not appStoreVersionLocalizations
+      app_infos = client.app_info
+      current_info = app_infos.find { |i| i[:state] != 'READY_FOR_DISTRIBUTION' }
+      current_info ||= app_infos.first
+
+      unless current_info
+        puts "\e[31mNo app info found.\e[0m"
+        exit 1
+      end
+
+      locs = client.app_info_localizations(app_info_id: current_info[:id])
+      loc = locs.find { |l| l[:locale] == locale }
+
+      unless loc
+        puts "\e[31mLocale not found: #{locale}\e[0m"
+        puts "Available: #{locs.map { |l| l[:locale] }.join(', ')}"
+        exit 1
+      end
+
+      client.update_app_info_localization(localization_id: loc[:id], privacy_policy_url: url)
+      puts "\e[32mPrivacy Policy URL updated!\e[0m"
+      puts "  Locale: #{locale}"
+      puts "  Privacy URL: #{url}"
     end
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -2107,9 +2557,21 @@ module AppStoreConnect
           ready             Check if ready for submission
           customer-reviews  List recent customer reviews
 
+        \e[1mAPP METADATA:\e[0m
+          description [locale]                  Show app description
+          update-description <locale> "text"    Update app description
+          keywords [locale]                     Show app keywords
+          update-keywords <locale> "words"      Update keywords (100 char limit)
+          urls [locale]                         Show marketing/support URLs
+          update-marketing-url <locale> <url>   Update marketing URL
+          update-support-url <locale> <url>     Update support URL
+          update-promotional-text <locale> "text"  Update promotional text
+          update-privacy-url <locale> <url>     Update privacy policy URL
+
         \e[1mWRITE COMMANDS (respond to Apple Review requests):\e[0m
           update-review-notes "notes"           Update notes for App Review
           update-whats-new "text"               Update "What's New" release notes
+          create-review-detail                  Create review detail for version
           update-sub-description <id> "desc"    Update subscription description
           update-iap-note <id> "note"           Update IAP review notes
           update-iap-description <id> "desc"    Update IAP description

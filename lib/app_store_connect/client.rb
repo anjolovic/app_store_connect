@@ -192,6 +192,46 @@ module AppStoreConnect
         demo_account_required: result.dig('attributes', 'demoAccountRequired'),
         notes: result.dig('attributes', 'notes')
       }
+    rescue ApiError => e
+      return nil if e.message.include?('Not found')
+
+      raise
+    end
+
+    # Create app store review detail for a version
+    def create_app_store_review_detail(version_id:, contact_first_name: nil, contact_last_name: nil,
+                                       contact_phone: nil, contact_email: nil,
+                                       demo_account_name: nil, demo_account_password: nil,
+                                       demo_account_required: nil, notes: nil)
+      attributes = {}
+      attributes[:contactFirstName] = contact_first_name if contact_first_name
+      attributes[:contactLastName] = contact_last_name if contact_last_name
+      attributes[:contactPhone] = contact_phone if contact_phone
+      attributes[:contactEmail] = contact_email if contact_email
+      attributes[:demoAccountName] = demo_account_name if demo_account_name
+      attributes[:demoAccountPassword] = demo_account_password if demo_account_password
+      attributes[:demoAccountRequired] = demo_account_required unless demo_account_required.nil?
+      attributes[:notes] = notes if notes
+
+      result = post('/appStoreReviewDetails', body: {
+                      data: {
+                        type: 'appStoreReviewDetails',
+                        attributes: attributes,
+                        relationships: {
+                          appStoreVersion: {
+                            data: {
+                              type: 'appStoreVersions',
+                              id: version_id
+                            }
+                          }
+                        }
+                      }
+                    })
+
+      {
+        id: result['data']['id'],
+        notes: result['data'].dig('attributes', 'notes')
+      }
     end
 
     # Update app store review detail (contact info, demo account for App Review)
