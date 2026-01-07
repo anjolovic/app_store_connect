@@ -170,4 +170,39 @@ RSpec.describe AppStoreConnect::Configuration do
       end
     end
   end
+
+  describe "SSL configuration" do
+    describe "#skip_crl_verification" do
+      it "defaults to true" do
+        expect(config.skip_crl_verification).to be true
+      end
+
+      it "can be set to false" do
+        config.skip_crl_verification = false
+        expect(config.skip_crl_verification).to be false
+      end
+    end
+
+    describe "#verify_ssl" do
+      it "defaults to true" do
+        expect(config.verify_ssl).to be true
+      end
+
+      it "can be set to false" do
+        config.verify_ssl = false
+        expect(config.verify_ssl).to be false
+      end
+    end
+
+    describe "#use_curl" do
+      it "defaults to false" do
+        expect(config.use_curl).to be false
+      end
+
+      it "can be set to true" do
+        config.use_curl = true
+        expect(config.use_curl).to be true
+      end
+    end
+  end
 end

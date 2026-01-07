@@ -64,7 +64,10 @@ module AppStoreConnect
       private_key_path: nil,
       app_id: nil,
       bundle_id: nil,
-      http_client: nil
+      http_client: nil,
+      skip_crl_verification: nil,
+      verify_ssl: nil,
+      use_curl: nil
     )
       config = AppStoreConnect.configuration
 
@@ -73,7 +76,17 @@ module AppStoreConnect
       @private_key_path = private_key_path || config.private_key_path
       @app_id = app_id || config.app_id
       @bundle_id = bundle_id || config.bundle_id
-      @http_client = http_client || HttpClient.new
+
+      # SSL configuration - use provided values or fall back to config
+      skip_crl = skip_crl_verification.nil? ? config.skip_crl_verification : skip_crl_verification
+      verify = verify_ssl.nil? ? config.verify_ssl : verify_ssl
+      curl = use_curl.nil? ? config.use_curl : use_curl
+
+      @http_client = http_client || build_http_client(
+        skip_crl_verification: skip_crl,
+        verify_ssl: verify,
+        use_curl: curl
+      )
 
       validate_configuration!
     end
@@ -517,6 +530,17 @@ module AppStoreConnect
 
     def blank?(value)
       value.nil? || (value.respond_to?(:empty?) && value.empty?)
+    end
+
+    def build_http_client(skip_crl_verification:, verify_ssl:, use_curl:)
+      if use_curl
+        CurlHttpClient.new
+      else
+        HttpClient.new(
+          skip_crl_verification: skip_crl_verification,
+          verify_ssl: verify_ssl
+        )
+      end
     end
   end
 end

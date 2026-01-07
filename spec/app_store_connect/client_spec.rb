@@ -50,6 +50,38 @@ RSpec.describe AppStoreConnect::Client do
         expect(global_client).to be_a(described_class)
       end
     end
+
+    context "with SSL configuration" do
+      it "accepts skip_crl_verification option" do
+        ssl_client = described_class.new(
+          key_id: "TEST_KEY_ID",
+          issuer_id: "TEST_ISSUER_ID",
+          private_key_path: key_file.path,
+          skip_crl_verification: false
+        )
+        expect(ssl_client).to be_a(described_class)
+      end
+
+      it "accepts verify_ssl option" do
+        ssl_client = described_class.new(
+          key_id: "TEST_KEY_ID",
+          issuer_id: "TEST_ISSUER_ID",
+          private_key_path: key_file.path,
+          verify_ssl: false
+        )
+        expect(ssl_client).to be_a(described_class)
+      end
+
+      it "accepts use_curl option" do
+        curl_client = described_class.new(
+          key_id: "TEST_KEY_ID",
+          issuer_id: "TEST_ISSUER_ID",
+          private_key_path: key_file.path,
+          use_curl: true
+        )
+        expect(curl_client).to be_a(described_class)
+      end
+    end
   end
 
   describe "#apps" do

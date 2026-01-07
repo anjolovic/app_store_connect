@@ -3,7 +3,8 @@
 module AppStoreConnect
   class Configuration
     attr_accessor :key_id, :issuer_id, :private_key_path,
-                  :app_id, :bundle_id
+                  :app_id, :bundle_id,
+                  :skip_crl_verification, :verify_ssl, :use_curl
 
     def initialize
       @key_id = ENV["APP_STORE_CONNECT_KEY_ID"]
@@ -11,6 +12,11 @@ module AppStoreConnect
       @private_key_path = ENV["APP_STORE_CONNECT_PRIVATE_KEY_PATH"]
       @app_id = ENV["APP_STORE_CONNECT_APP_ID"]
       @bundle_id = ENV["APP_STORE_CONNECT_BUNDLE_ID"]
+
+      # SSL configuration - defaults handle CRL issues with Apple certificates
+      @skip_crl_verification = true  # Skip CRL checks that often fail with Apple
+      @verify_ssl = true             # Still verify SSL certificates
+      @use_curl = false              # Use Net::HTTP by default, curl as fallback
     end
 
     def valid?
