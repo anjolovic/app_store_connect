@@ -1,0 +1,16 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "bundler/setup"
+
+# Auto-load dotenv if available (common in Rails projects)
+begin
+  require "dotenv"
+  Dotenv.load(".env.development", ".env")
+rescue LoadError
+  # dotenv not available, skip
+end
+
+require "app_store_connect"
+
+AppStoreConnect::CLI.new(ARGV).run
