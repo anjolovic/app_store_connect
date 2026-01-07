@@ -6,8 +6,10 @@ A Ruby library and command-line tool for interacting with Apple's App Store Conn
 
 - Check app status, versions, and review submissions
 - List and manage subscription products
+- List and manage in-app purchases (update metadata, descriptions, submit for review)
 - View and update app metadata (description, what's new, keywords)
 - Update reviewer notes and demo account info
+- Respond to customer reviews
 - Submit apps for review and cancel pending submissions
 - Works with any Ruby project (no Rails dependency)
 
@@ -114,6 +116,15 @@ asc subs
 # View detailed subscription info with localizations
 asc sub-details
 
+# View in-app purchases
+asc iaps
+
+# View detailed IAP info with localizations
+asc iap-details
+
+# View customer reviews
+asc customer-reviews
+
 # Check submission readiness
 asc ready
 
@@ -136,11 +147,140 @@ asc update-whats-new "Bug fixes and performance improvements"
 # Update subscription description
 asc update-sub-description com.example.app.plan.starter.monthly "Access basic features"
 
+# Update IAP review notes (for Apple reviewers)
+asc update-iap-note com.example.app.coins.100 "Unlocks 100 coins for gameplay"
+
+# Update IAP description (shown to users)
+asc update-iap-description com.example.app.coins.100 "Get 100 coins to use in-game"
+
+# Submit IAP for review
+asc submit-iap com.example.app.coins.100
+
+# Respond to customer reviews
+asc respond-review abc123 "Thank you for your feedback!"
+
 # Submit for review
 asc submit
 
 # Cancel pending review
 asc cancel-review
+```
+
+### Screenshot Management
+
+```bash
+# View current screenshots
+asc screenshots
+
+# Upload IAP review screenshot
+asc upload-iap-screenshot com.example.app.coins.100 ~/Desktop/iap-screenshot.png
+
+# Delete IAP review screenshot
+asc delete-iap-screenshot com.example.app.coins.100
+
+# Upload app screenshot (for iPhone 6.7")
+asc upload-screenshot APP_IPHONE_67 en-US ~/Desktop/screenshot.png
+
+# Delete app screenshot
+asc delete-screenshot abc123
+```
+
+### Release Automation
+
+```bash
+# Create a new version
+asc create-version 2.0.0
+asc create-version 2.0.0 MANUAL    # Hold for manual release after approval
+
+# Enable phased rollout (gradual 7-day release)
+asc enable-phased-release
+
+# Control phased release
+asc phased-release                 # Check status
+asc pause-release                  # Pause if issues found
+asc resume-release                 # Resume rollout
+asc complete-release               # Release to all users now
+
+# Manual release (for MANUAL release type)
+asc release
+
+# Pre-orders
+asc enable-pre-order 2025-06-01
+asc pre-order                      # Check status
+asc cancel-pre-order
+```
+
+### TestFlight Automation
+
+```bash
+# List beta testers and groups
+asc testers
+asc tester-groups
+
+# Add/remove testers
+asc add-tester test@example.com John Doe
+asc add-tester test@example.com John Doe group_id_1 group_id_2
+asc remove-tester tester_id
+
+# Manage beta groups
+asc create-group "External Testers"
+asc create-group "Public Beta" --public --limit 1000
+asc delete-group group_id
+asc group-testers group_id
+
+# Add/remove testers from groups
+asc add-to-group group_id tester1 tester2
+asc remove-from-group group_id tester1
+
+# Distribute builds
+asc testflight-builds
+asc distribute-build build_id group_id
+asc remove-build build_id group_id
+
+# Beta What's New text
+asc beta-whats-new build_id
+asc update-beta-whats-new build_id "Bug fixes and improvements"
+
+# Submit for external beta review
+asc submit-beta-review build_id
+asc beta-review-status build_id
+```
+
+### App Administration
+
+```bash
+# View app info
+asc app-info                         # App name, subtitle, localizations
+asc age-rating                       # Age rating declaration
+asc categories                       # Available categories
+
+# Update app metadata
+asc update-app-name "My App"
+asc update-subtitle "Best app ever"
+
+# Availability and pricing
+asc availability                     # Where app is available
+asc territories                      # All territories
+asc pricing                          # Price schedule and points
+
+# Privacy labels
+asc privacy-labels                   # Data usage declarations
+```
+
+### User Management
+
+```bash
+# View team
+asc users                            # List team users
+asc invitations                      # Pending invitations
+
+# Invite users
+asc invite-user jane@example.com Jane Doe DEVELOPER
+asc invite-user john@example.com John Smith APP_MANAGER MARKETING
+
+# Manage users
+asc remove-user user_id
+asc cancel-invitation invitation_id
 ```
 
 ### Show Help
@@ -216,6 +356,39 @@ client.create_review_submission(platform: "IOS")
 
 # Cancel pending review
 client.cancel_review_submission(submission_id: "submission_id")
+
+# List in-app purchases
+iaps = client.in_app_purchases
+iaps.each do |iap|
+  puts "#{iap[:name]}: #{iap[:state]} (#{iap[:type]})"
+end
+
+# Update IAP review notes
+client.update_in_app_purchase(iap_id: "123", review_note: "This unlocks premium features")
+
+# Get IAP localizations
+locs = client.in_app_purchase_localizations(iap_id: "123")
+
+# Update IAP description
+client.update_in_app_purchase_localization(
+  localization_id: "456",
+  description: "Get access to all premium features"
+)
+
+# Submit IAP for review
+client.submit_in_app_purchase(iap_id: "123")
+
+# List customer reviews
+reviews = client.customer_reviews(limit: 20)
+reviews.each do |review|
+  puts "#{review[:rating]} stars: #{review[:title]}"
+end
+
+# Respond to a customer review
+client.create_customer_review_response(
+  review_id: "abc123",
+  response_body: "Thank you for your feedback!"
+)
 ```
 
 ## Available Methods
@@ -237,6 +410,42 @@ client.cancel_review_submission(submission_id: "submission_id")
 | `app_store_review_detail` | Get review contact info |
 | `beta_app_review_detail` | Get TestFlight review info |
 | `in_app_purchases` | List in-app purchases |
+| `in_app_purchase` | Get single IAP details |
+| `in_app_purchase_localizations` | Get IAP localizations |
+| `customer_reviews` | List customer reviews |
+| `customer_review_response` | Get response to a review |
+| `iap_review_screenshot` | Get IAP review screenshot |
+| `app_screenshot_sets` | Get screenshot sets for a localization |
+| `app_screenshots` | Get screenshots in a set |
+| `app_preview_sets` | Get preview sets for a localization |
+| `app_previews` | Get previews in a set |
+| `phased_release` | Get phased release status |
+| `pre_order` | Get pre-order info |
+| `beta_testers` | List beta testers |
+| `beta_tester` | Get single beta tester |
+| `beta_groups` | List beta groups |
+| `beta_group` | Get single beta group |
+| `beta_group_testers` | List testers in a group |
+| `testflight_builds` | List TestFlight builds |
+| `beta_build_detail` | Get beta build details |
+| `build_beta_groups` | Get groups for a build |
+| `beta_build_localizations` | Get What's New for build |
+| `beta_app_review_submission` | Get beta review status |
+| `app_info` | Get app info (age rating, categories) |
+| `app_info_localizations` | Get app name, subtitle, privacy URL |
+| `app_categories` | Get app's primary/secondary categories |
+| `available_categories` | List all available categories |
+| `age_rating_declaration` | Get age rating declaration |
+| `app_price_schedule` | Get pricing schedule |
+| `app_price_points` | Get available price points |
+| `app_availability` | Get territory availability |
+| `territories` | List all territories |
+| `users` | List team users |
+| `user` | Get single user |
+| `user_invitations` | List pending invitations |
+| `app_data_usages` | Get privacy data declarations |
+| `sales_report` | Get sales report (gzipped) |
+| `finance_report` | Get finance report (gzipped) |
 
 ### Write Methods
 
@@ -244,12 +453,60 @@ client.cancel_review_submission(submission_id: "submission_id")
 |--------|-------------|
 | `update_subscription` | Update subscription metadata |
 | `update_subscription_localization` | Update subscription description |
-| `create_subscription_localization` | Create new localization |
+| `create_subscription_localization` | Create new subscription localization |
 | `update_app_store_version_localization` | Update version metadata |
 | `update_app_store_review_detail` | Update reviewer notes |
 | `update_beta_app_review_detail` | Update TestFlight notes |
 | `create_review_submission` | Submit for review |
 | `cancel_review_submission` | Cancel pending review |
+| `update_in_app_purchase` | Update IAP metadata/review notes |
+| `create_in_app_purchase_localization` | Create IAP localization |
+| `update_in_app_purchase_localization` | Update IAP description |
+| `delete_in_app_purchase_localization` | Delete IAP localization |
+| `submit_in_app_purchase` | Submit IAP for review |
+| `create_customer_review_response` | Respond to customer review |
+| `delete_customer_review_response` | Delete review response |
+| `upload_iap_review_screenshot` | Upload IAP review screenshot |
+| `delete_iap_review_screenshot` | Delete IAP review screenshot |
+| `create_app_screenshot_set` | Create screenshot set |
+| `upload_app_screenshot` | Upload app screenshot |
+| `delete_app_screenshot` | Delete app screenshot |
+| `reorder_app_screenshots` | Reorder screenshots in a set |
+| `create_app_preview_set` | Create app preview set |
+| `upload_app_preview` | Upload app preview video |
+| `delete_app_preview` | Delete app preview |
+| `create_app_store_version` | Create new app version |
+| `update_app_store_version` | Update version settings |
+| `release_version` | Release pending version |
+| `create_phased_release` | Enable phased rollout |
+| `update_phased_release` | Pause/resume/complete rollout |
+| `delete_phased_release` | Disable phased release |
+| `create_pre_order` | Enable pre-orders |
+| `update_pre_order` | Update pre-order date |
+| `delete_pre_order` | Cancel pre-orders |
+| `create_beta_tester` | Add a beta tester |
+| `delete_beta_tester` | Remove a beta tester |
+| `add_tester_to_groups` | Add tester to groups |
+| `remove_tester_from_groups` | Remove tester from groups |
+| `create_beta_group` | Create a beta group |
+| `update_beta_group` | Update beta group settings |
+| `delete_beta_group` | Delete a beta group |
+| `add_testers_to_group` | Add testers to a group |
+| `remove_testers_from_group` | Remove testers from group |
+| `add_build_to_groups` | Distribute build to groups |
+| `remove_build_from_groups` | Remove build from groups |
+| `update_beta_build_detail` | Update beta build settings |
+| `create_beta_build_localization` | Add What's New text |
+| `update_beta_build_localization` | Update What's New text |
+| `submit_for_beta_review` | Submit for beta review |
+| `update_app_info_localization` | Update app name/subtitle/privacy URL |
+| `update_app_categories` | Update app categories |
+| `update_age_rating_declaration` | Update age rating |
+| `update_app_availability` | Update territory availability |
+| `update_user` | Update user roles |
+| `delete_user` | Remove user from team |
+| `create_user_invitation` | Invite new user |
+| `delete_user_invitation` | Cancel invitation |
 
 ## Development
 
