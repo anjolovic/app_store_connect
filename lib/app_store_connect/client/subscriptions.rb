@@ -20,6 +20,39 @@ module AppStoreConnect
         end
       end
 
+      # Get subscription localizations
+      def subscription_localizations(subscription_id:)
+        get("/subscriptions/#{subscription_id}/subscriptionLocalizations")['data'].map do |loc|
+          {
+            id: loc['id'],
+            locale: loc.dig('attributes', 'locale'),
+            name: loc.dig('attributes', 'name'),
+            description: loc.dig('attributes', 'description')
+          }
+        end
+      end
+
+      # Create subscription localization
+      def create_subscription_localization(subscription_id:, locale:, name:, description: nil)
+        body = {
+          data: {
+            type: 'subscriptionLocalizations',
+            attributes: {
+              locale: locale,
+              name: name
+            },
+            relationships: {
+              subscription: {
+                data: { type: 'subscriptions', id: subscription_id }
+              }
+            }
+          }
+        }
+        body[:data][:attributes][:description] = description if description
+
+        post('/subscriptionLocalizations', body: body)
+      end
+
       # Update subscription metadata (name, group level, review note)
       def update_subscription(subscription_id:, name: nil, group_level: nil, review_note: nil)
         attributes = {}
