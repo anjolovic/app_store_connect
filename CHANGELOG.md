@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-01-07
+
+### App Metadata Commands
+- `description` / `update-description` - View and update app description
+- `keywords` / `update-keywords` - View and update keywords (100 char limit)
+- `urls` - View marketing and support URLs
+- `update-marketing-url` - Update marketing URL
+- `update-support-url` - Update support URL
+- `update-promotional-text` - Update promotional text
+- `update-privacy-url` - Update privacy policy URL
+
+### App Review Commands
+- `update-review-contact` - Set reviewer contact info (firstName, lastName, email, phone)
+- `update-demo-account` - Set demo account credentials (username, password, required flag)
+- `create-review-detail` - Create review detail for version
+- `update-review-notes` now auto-creates review detail if missing
+- `update-whats-new` shows helpful error for first version (409 handling)
+
+### Screenshot Improvements
+- `upload-screenshots` - Batch upload from directory structure
+- `ready` command now shows screenshot status and warns about missing device types
+
+### Technical Improvements
+- Refactored Client class into domain-specific modules for maintainability
+- Added CRL verification handling for Apple certificate issues
+- Added `skip_crl_verification` and `use_curl` options for SSL troubleshooting
+- Fixed missing Client methods for screenshots and privacy-labels commands
+
+---
+
 ## [1.1.0] - 2025-01-06
 
 ### Major Expansion Release
