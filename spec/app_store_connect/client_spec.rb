@@ -364,4 +364,151 @@ RSpec.describe AppStoreConnect::Client do
       expect(payload["exp"]).to be > Time.now.to_i
     end
   end
+
+  describe "#app_screenshot_sets" do
+    let(:screenshot_sets_response) do
+      {
+        data: [
+          {
+            id: "set123",
+            type: "appScreenshotSets",
+            attributes: {
+              screenshotDisplayType: "APP_IPHONE_67"
+            }
+          },
+          {
+            id: "set456",
+            type: "appScreenshotSets",
+            attributes: {
+              screenshotDisplayType: "APP_IPAD_PRO_129"
+            }
+          }
+        ]
+      }
+    end
+
+    before do
+      stub_api_get(
+        "/appStoreVersionLocalizations/loc123/appScreenshotSets",
+        response_body: screenshot_sets_response
+      )
+    end
+
+    it "returns a list of screenshot sets" do
+      sets = client.app_screenshot_sets(localization_id: "loc123")
+      expect(sets).to be_an(Array)
+      expect(sets.length).to eq(2)
+    end
+
+    it "returns screenshot set with correct attributes" do
+      set = client.app_screenshot_sets(localization_id: "loc123").first
+      expect(set[:id]).to eq("set123")
+      expect(set[:screenshot_display_type]).to eq("APP_IPHONE_67")
+    end
+  end
+
+  describe "#app_screenshots" do
+    let(:screenshots_response) do
+      {
+        data: [
+          {
+            id: "ss123",
+            type: "appScreenshots",
+            attributes: {
+              fileName: "screenshot1.png",
+              fileSize: 123456,
+              assetDeliveryState: { state: "COMPLETE" },
+              sourceFileChecksum: "abc123"
+            }
+          }
+        ]
+      }
+    end
+
+    before do
+      stub_api_get(
+        "/appScreenshotSets/set123/appScreenshots",
+        response_body: screenshots_response
+      )
+    end
+
+    it "returns a list of screenshots" do
+      screenshots = client.app_screenshots(screenshot_set_id: "set123")
+      expect(screenshots).to be_an(Array)
+      expect(screenshots.length).to eq(1)
+    end
+
+    it "returns screenshot with correct attributes" do
+      screenshot = client.app_screenshots(screenshot_set_id: "set123").first
+      expect(screenshot[:id]).to eq("ss123")
+      expect(screenshot[:file_name]).to eq("screenshot1.png")
+      expect(screenshot[:upload_state]).to eq("COMPLETE")
+    end
+  end
+
+  describe "#app_data_usages" do
+    let(:data_usages_response) do
+      {
+        data: [
+          {
+            id: "usage123",
+            type: "appDataUsages",
+            attributes: {
+              category: "ANALYTICS"
+            },
+            relationships: {
+              purposes: {
+                data: [
+                  { type: "appDataUsagePurposes", id: "ANALYTICS" }
+                ]
+              },
+              dataProtection: {
+                data: { type: "appDataUsageDataProtections", id: "dp123" }
+              }
+            }
+          }
+        ],
+        included: [
+          {
+            id: "dp123",
+            type: "appDataUsageDataProtections",
+            attributes: {
+              dataProtection: "DATA_NOT_LINKED_TO_YOU"
+            }
+          }
+        ]
+      }
+    end
+
+    before do
+      stub_api_get(
+        "/apps/123456789/appDataUsages?include=dataProtection",
+        response_body: data_usages_response
+      )
+    end
+
+    it "returns a list of data usages" do
+      usages = client.app_data_usages
+      expect(usages).to be_an(Array)
+      expect(usages.length).to eq(1)
+    end
+
+    it "returns data usage with correct attributes" do
+      usage = client.app_data_usages.first
+      expect(usage[:id]).to eq("usage123")
+      expect(usage[:category]).to eq("ANALYTICS")
+      expect(usage[:purposes]).to eq(["ANALYTICS"])
+      expect(usage[:data_protection]).to eq("DATA_NOT_LINKED_TO_YOU")
+    end
+  end
+
+  describe "#delete_app_screenshot" do
+    before do
+      stub_api_delete("/appScreenshots/ss123")
+    end
+
+    it "deletes the screenshot" do
+      expect { client.delete_app_screenshot(screenshot_id: "ss123") }.not_to raise_error
+    end
+  end
 end
