@@ -2167,7 +2167,7 @@ module AppStoreConnect
       # Use curl to avoid Ruby's SSL CRL verification issues
       curl_method = method.to_s.upcase
       curl_cmd = [
-        'curl', '-s', '-X', curl_method,
+        'curl', '-s', '-g', '-X', curl_method,
         '-H', "Authorization: Bearer #{generate_token}",
         '-H', 'Content-Type: application/json'
       ]
