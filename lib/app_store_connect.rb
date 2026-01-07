@@ -3,6 +3,7 @@
 require_relative "app_store_connect/version"
 require_relative "app_store_connect/errors"
 require_relative "app_store_connect/configuration"
+require_relative "app_store_connect/http_client"
 require_relative "app_store_connect/client"
 require_relative "app_store_connect/cli"
 
