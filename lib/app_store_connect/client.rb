@@ -45,7 +45,8 @@ module AppStoreConnect
       issuer_id: nil,
       private_key_path: nil,
       app_id: nil,
-      bundle_id: nil
+      bundle_id: nil,
+      http_client: nil
     )
       config = AppStoreConnect.configuration
 
@@ -54,6 +55,7 @@ module AppStoreConnect
       @private_key_path = private_key_path || config.private_key_path
       @app_id = app_id || config.app_id
       @bundle_id = bundle_id || config.bundle_id
+      @http_client = http_client || HttpClient.new
 
       validate_configuration!
     end
@@ -1204,7 +1206,7 @@ module AppStoreConnect
       {
         id: result['data']['id'],
         email: result['data'].dig('attributes', 'email'),
-        state: result['data'].dig('attributes', 'state')
+        state: result['data'].dig('attributes', 'betaTestersState')
       }
     end
 
@@ -2164,50 +2166,54 @@ module AppStoreConnect
       uri = URI("#{BASE_URL}#{path}")
       uri.query = URI.encode_www_form(params) if params.any?
 
-      # Use curl to avoid Ruby's SSL CRL verification issues
-      curl_method = method.to_s.upcase
-      curl_cmd = [
-        'curl', '-s', '-g', '-X', curl_method,
-        '-H', "Authorization: Bearer #{generate_token}",
-        '-H', 'Content-Type: application/json'
-      ]
+      headers = {
+        "Authorization" => "Bearer #{generate_token}",
+        "Content-Type" => "application/json"
+      }
 
-      curl_cmd += ['-d', body.to_json] if body
+      response = @http_client.execute(
+        method: method,
+        url: uri.to_s,
+        headers: headers,
+        body: body
+      )
 
-      curl_cmd << uri.to_s
+      result = response[:body]
+      status_code = response[:status]
 
-      output = `#{curl_cmd.shelljoin}`
-      status = $CHILD_STATUS
+      # Check for HTTP error status codes
+      handle_error_response(result, status_code, path) if status_code >= 400
 
-      raise ApiError, "HTTP request failed with exit code #{status.exitstatus}" unless status.success?
-
-      begin
-        result = JSON.parse(output)
-      rescue JSON::ParserError => e
-        raise ApiError, "Invalid JSON response: #{e.message}"
-      end
-
-      # Check for API errors in the response
-      if result['errors'].is_a?(Array) && result['errors'].any?
-        error = result['errors'].first
-        status_code = error['status']&.to_i || 500
-        detail = error['detail'] || error['title'] || 'Unknown error'
-
-        case status_code
-        when 401
-          raise ApiError, 'Unauthorized - check your API key credentials'
-        when 403
-          raise ApiError, 'Forbidden - your API key may not have the required permissions'
-        when 404
-          raise ApiError, "Not found - resource doesn't exist: #{path}"
-        when 429
-          raise ApiError, 'Rate limited - too many requests'
-        else
-          raise ApiError, "API error (#{status_code}): #{detail}"
-        end
+      # Check for API errors in the response body
+      if result.is_a?(Hash) && result["errors"].is_a?(Array) && result["errors"].any?
+        error = result["errors"].first
+        error_status = error["status"]&.to_i || status_code
+        handle_error_response(result, error_status, path)
       end
 
       result
+    end
+
+    def handle_error_response(result, status_code, path)
+      detail = if result.is_a?(Hash) && result["errors"].is_a?(Array) && result["errors"].any?
+                 error = result["errors"].first
+                 error["detail"] || error["title"] || "Unknown error"
+               else
+                 "HTTP #{status_code}"
+               end
+
+      case status_code
+      when 401
+        raise ApiError, "Unauthorized - check your API key credentials"
+      when 403
+        raise ApiError, "Forbidden - your API key may not have the required permissions"
+      when 404
+        raise ApiError, "Not found - resource doesn't exist: #{path}"
+      when 429
+        raise ApiError, "Rate limited - too many requests"
+      else
+        raise ApiError, "API error (#{status_code}): #{detail}"
+      end
     end
 
     def generate_token
