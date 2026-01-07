@@ -14,7 +14,7 @@ module AppStoreConnect
   #
   class CLI
     COMMANDS = %w[status review subs subscriptions builds apps ready help
-                  review-info update-review-notes cancel-review submit create-review-detail
+                  review-info update-review-notes update-review-contact cancel-review submit create-review-detail
                   sub-details update-sub-description version-info update-whats-new
                   description update-description keywords update-keywords
                   urls update-marketing-url update-support-url
@@ -322,6 +322,80 @@ module AppStoreConnect
       puts "\e[32mReview notes updated successfully!\e[0m"
       puts "  Version: #{active_version.dig('attributes', 'versionString')}"
       puts "  Notes: #{notes}"
+    end
+
+    def cmd_update_review_contact
+      # Parse arguments: --first-name, --last-name, --email, --phone
+      first_name = nil
+      last_name = nil
+      email = nil
+      phone = nil
+
+      args = @options.dup
+      while args.any?
+        arg = args.shift
+        case arg
+        when '--first-name'
+          first_name = args.shift
+        when '--last-name'
+          last_name = args.shift
+        when '--email'
+          email = args.shift
+        when '--phone'
+          phone = args.shift
+        end
+      end
+
+      if [first_name, last_name, email, phone].all?(&:nil?)
+        puts "\e[31mUsage: asc update-review-contact --first-name NAME --last-name NAME --email EMAIL --phone PHONE\e[0m"
+        puts "  At least one option is required."
+        exit 1
+      end
+
+      versions = client.app_store_versions
+      active_version = versions.find { |v| v.dig('attributes', 'appStoreState') == 'WAITING_FOR_REVIEW' }
+      active_version ||= versions.find { |v| v.dig('attributes', 'appStoreState') == 'PREPARE_FOR_SUBMISSION' }
+
+      unless active_version
+        puts "\e[31mNo active version found to update.\e[0m"
+        exit 1
+      end
+
+      version_id = active_version['id']
+      detail = client.app_store_review_detail(version_id: version_id)
+
+      unless detail
+        # Auto-create review detail if it doesn't exist
+        puts "\e[33mNo review detail found, creating one...\e[0m"
+        client.create_app_store_review_detail(
+          version_id: version_id,
+          contact_first_name: first_name,
+          contact_last_name: last_name,
+          contact_email: email,
+          contact_phone: phone
+        )
+        puts "\e[32mReview detail created with contact info!\e[0m"
+        puts "  Version: #{active_version.dig('attributes', 'versionString')}"
+        puts "  First Name: #{first_name}" if first_name
+        puts "  Last Name: #{last_name}" if last_name
+        puts "  Email: #{email}" if email
+        puts "  Phone: #{phone}" if phone
+        return
+      end
+
+      client.update_app_store_review_detail(
+        detail_id: detail[:id],
+        contact_first_name: first_name,
+        contact_last_name: last_name,
+        contact_email: email,
+        contact_phone: phone
+      )
+      puts "\e[32mReview contact updated successfully!\e[0m"
+      puts "  Version: #{active_version.dig('attributes', 'versionString')}"
+      puts "  First Name: #{first_name}" if first_name
+      puts "  Last Name: #{last_name}" if last_name
+      puts "  Email: #{email}" if email
+      puts "  Phone: #{phone}" if phone
     end
 
     def cmd_create_review_detail
@@ -2570,6 +2644,7 @@ module AppStoreConnect
 
         \e[1mWRITE COMMANDS (respond to Apple Review requests):\e[0m
           update-review-notes "notes"           Update notes for App Review
+          update-review-contact [options]       Update App Review contact info
           update-whats-new "text"               Update "What's New" release notes
           create-review-detail                  Create review detail for version
           update-sub-description <id> "desc"    Update subscription description
@@ -2672,6 +2747,9 @@ module AppStoreConnect
           asc customer-reviews          # View recent customer reviews
 
         \e[1mRESPONDING TO APPLE REVIEW:\e[0m
+          # If Apple requests contact info (required before review notes):
+          asc update-review-contact --first-name John --last-name Doe --email john@example.com --phone "+1234567890"
+
           # If Apple requests updated reviewer notes:
           asc update-review-notes "Use demo account: test@example.com / password123"
 
