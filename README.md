@@ -67,6 +67,38 @@ AppStoreConnect.configure do |config|
 end
 ```
 
+## Rails Integration
+
+For Rails projects using `dotenv-rails`, the CLI will automatically load your `.env` file.
+
+### 1. Add to Gemfile
+
+```ruby
+gem "app_store_connect", path: "~/Web/RubyGems/app_store_connect"
+```
+
+### 2. Add environment variables to `.env`
+
+```bash
+APP_STORE_CONNECT_KEY_ID=YOUR_KEY_ID
+APP_STORE_CONNECT_ISSUER_ID=YOUR_ISSUER_ID
+APP_STORE_CONNECT_PRIVATE_KEY_PATH=AuthKey_XXXX.p8
+APP_STORE_CONNECT_APP_ID=YOUR_APP_ID
+APP_STORE_CONNECT_BUNDLE_ID=com.example.app
+```
+
+### 3. Run bundle install
+
+```bash
+bundle install
+```
+
+### 4. Use the CLI
+
+```bash
+bundle exec asc status
+```
+
 ## Command Line Usage
 
 ```bash
