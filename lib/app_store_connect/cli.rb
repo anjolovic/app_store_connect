@@ -15,7 +15,7 @@ module AppStoreConnect
   class CLI
     COMMANDS = %w[status review subs subscriptions builds apps ready help
                   review-info update-review-notes update-review-contact update-demo-account cancel-review submit create-review-detail
-                  sub-details update-sub-description version-info update-whats-new
+                  sub-details update-sub-description update-sub-note version-info update-whats-new
                   description update-description keywords update-keywords
                   urls update-marketing-url update-support-url
                   update-promotional-text update-privacy-url
@@ -654,6 +654,30 @@ module AppStoreConnect
       puts "\e[32mUpdated subscription description!\e[0m"
       puts "  Product: #{product_id}"
       puts "  Description: #{description}"
+    end
+
+    def cmd_update_sub_note
+      if @options.length < 2
+        puts "\e[31mUsage: asc update-sub-note <product_id> \"Review note for Apple\"\e[0m"
+        puts 'Example: asc update-sub-note com.example.app.plan.starter.monthly "This subscription unlocks premium features"'
+        exit 1
+      end
+
+      product_id = @options[0]
+      review_note = @options[1..].join(' ')
+
+      subs = client.subscriptions
+      sub = subs.find { |s| s.dig('attributes', 'productId') == product_id }
+
+      unless sub
+        puts "\e[31mSubscription not found: #{product_id}\e[0m"
+        exit 1
+      end
+
+      client.update_subscription(subscription_id: sub['id'], review_note: review_note)
+      puts "\e[32mUpdated subscription review note!\e[0m"
+      puts "  Product: #{product_id}"
+      puts "  Review Note: #{review_note}"
     end
 
     def cmd_version_info
@@ -2822,6 +2846,7 @@ module AppStoreConnect
           update-whats-new "text"               Update "What's New" release notes
           create-review-detail                  Create review detail for version
           update-sub-description <id> "desc"    Update subscription description
+          update-sub-note <id> "note"           Update subscription review note
           update-iap-note <id> "note"           Update IAP review notes
           update-iap-description <id> "desc"    Update IAP description
           submit-iap <product_id>               Submit IAP for review

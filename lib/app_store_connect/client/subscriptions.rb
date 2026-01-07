@@ -20,11 +20,12 @@ module AppStoreConnect
         end
       end
 
-      # Update subscription metadata (name, group level)
-      def update_subscription(subscription_id:, name: nil, group_level: nil)
+      # Update subscription metadata (name, group level, review note)
+      def update_subscription(subscription_id:, name: nil, group_level: nil, review_note: nil)
         attributes = {}
         attributes[:name] = name if name
         attributes[:groupLevel] = group_level if group_level
+        attributes[:reviewNote] = review_note if review_note
 
         return nil if attributes.empty?
 
