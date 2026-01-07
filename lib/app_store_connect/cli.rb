@@ -14,7 +14,7 @@ module AppStoreConnect
   #
   class CLI
     COMMANDS = %w[status review subs subscriptions builds apps ready help
-                  review-info update-review-notes update-review-contact cancel-review submit create-review-detail
+                  review-info update-review-notes update-review-contact update-demo-account cancel-review submit create-review-detail
                   sub-details update-sub-description version-info update-whats-new
                   description update-description keywords update-keywords
                   urls update-marketing-url update-support-url
@@ -396,6 +396,75 @@ module AppStoreConnect
       puts "  Last Name: #{last_name}" if last_name
       puts "  Email: #{email}" if email
       puts "  Phone: #{phone}" if phone
+    end
+
+    def cmd_update_demo_account
+      # Parse arguments: --username, --password, --required
+      username = nil
+      password = nil
+      required = nil
+
+      args = @options.dup
+      while args.any?
+        arg = args.shift
+        case arg
+        when '--username'
+          username = args.shift
+        when '--password'
+          password = args.shift
+        when '--required'
+          required = true
+        when '--not-required'
+          required = false
+        end
+      end
+
+      if username.nil? && password.nil? && required.nil?
+        puts "\e[31mUsage: asc update-demo-account --username USER --password PASS [--required|--not-required]\e[0m"
+        puts "  At least one option is required."
+        exit 1
+      end
+
+      versions = client.app_store_versions
+      active_version = versions.find { |v| v.dig('attributes', 'appStoreState') == 'WAITING_FOR_REVIEW' }
+      active_version ||= versions.find { |v| v.dig('attributes', 'appStoreState') == 'PREPARE_FOR_SUBMISSION' }
+
+      unless active_version
+        puts "\e[31mNo active version found to update.\e[0m"
+        exit 1
+      end
+
+      version_id = active_version['id']
+      detail = client.app_store_review_detail(version_id: version_id)
+
+      unless detail
+        # Auto-create review detail if it doesn't exist
+        puts "\e[33mNo review detail found, creating one...\e[0m"
+        client.create_app_store_review_detail(
+          version_id: version_id,
+          demo_account_name: username,
+          demo_account_password: password,
+          demo_account_required: required
+        )
+        puts "\e[32mReview detail created with demo account!\e[0m"
+        puts "  Version: #{active_version.dig('attributes', 'versionString')}"
+        puts "  Username: #{username}" if username
+        puts "  Password: #{password ? '********' : '(not set)'}"
+        puts "  Required: #{required}" unless required.nil?
+        return
+      end
+
+      client.update_app_store_review_detail(
+        detail_id: detail[:id],
+        demo_account_name: username,
+        demo_account_password: password,
+        demo_account_required: required
+      )
+      puts "\e[32mDemo account updated successfully!\e[0m"
+      puts "  Version: #{active_version.dig('attributes', 'versionString')}"
+      puts "  Username: #{username}" if username
+      puts "  Password: #{password ? '********' : '(not set)'}"
+      puts "  Required: #{required}" unless required.nil?
     end
 
     def cmd_create_review_detail
@@ -2645,6 +2714,7 @@ module AppStoreConnect
         \e[1mWRITE COMMANDS (respond to Apple Review requests):\e[0m
           update-review-notes "notes"           Update notes for App Review
           update-review-contact [options]       Update App Review contact info
+          update-demo-account [options]         Set demo account for App Review
           update-whats-new "text"               Update "What's New" release notes
           create-review-detail                  Create review detail for version
           update-sub-description <id> "desc"    Update subscription description
@@ -2749,6 +2819,9 @@ module AppStoreConnect
         \e[1mRESPONDING TO APPLE REVIEW:\e[0m
           # If Apple requests contact info (required before review notes):
           asc update-review-contact --first-name John --last-name Doe --email john@example.com --phone "+1234567890"
+
+          # If your app requires sign-in, set demo account credentials:
+          asc update-demo-account --username demo@example.com --password secret123 --required
 
           # If Apple requests updated reviewer notes:
           asc update-review-notes "Use demo account: test@example.com / password123"
