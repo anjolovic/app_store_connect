@@ -3,6 +3,9 @@
 require "jwt"
 require "json"
 require "shellwords"
+require "uri"
+require "openssl"
+require "time"
 
 module AppStoreConnect
   # App Store Connect API client for checking app status, review submissions,
