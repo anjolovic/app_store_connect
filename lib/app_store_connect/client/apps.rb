@@ -48,6 +48,7 @@ module AppStoreConnect
       def submission_readiness
         status = app_status
         issues = []
+        screenshot_status = { total: 0, by_type: {} }
 
         # Check version state
         preparing = status[:versions].find { |v| v[:state] == 'PREPARE_FOR_SUBMISSION' }
@@ -63,6 +64,34 @@ module AppStoreConnect
         sub_rejected = status[:subscriptions].select { |s| s[:state] == 'REJECTED' }
         issues << "Subscriptions rejected: #{sub_rejected.map { |s| s[:product_id] }.join(', ')}" if sub_rejected.any?
 
+        # Check screenshots for preparing version
+        if preparing
+          version_id = preparing[:id]
+          begin
+            locs = app_store_version_localizations(version_id: version_id)
+            # Check first localization for screenshots (usually en-US)
+            if locs.any?
+              loc = locs.first
+              sets = app_screenshot_sets(localization_id: loc[:id])
+
+              required_types = %w[APP_IPHONE_67 APP_IPHONE_65]
+              sets.each do |set|
+                screenshots = app_screenshots(screenshot_set_id: set[:id])
+                count = screenshots.length
+                screenshot_status[:by_type][set[:screenshot_display_type]] = count
+                screenshot_status[:total] += count
+              end
+
+              missing_types = required_types - screenshot_status[:by_type].keys
+              issues << "Missing screenshots for: #{missing_types.join(', ')}" if missing_types.any?
+
+              issues << 'No screenshots uploaded' if screenshot_status[:total].zero?
+            end
+          rescue ApiError
+            # Ignore screenshot check errors
+          end
+        end
+
         {
           ready: issues.empty?,
           current_state: if waiting
@@ -71,7 +100,8 @@ module AppStoreConnect
                            (preparing ? 'PREPARE_FOR_SUBMISSION' : 'UNKNOWN')
                          end,
           issues: issues,
-          status: status
+          status: status,
+          screenshots: screenshot_status
         }
       end
 

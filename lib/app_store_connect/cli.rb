@@ -22,7 +22,7 @@ module AppStoreConnect
                   iaps iap-details update-iap-note update-iap-description submit-iap
                   customer-reviews respond-review
                   upload-iap-screenshot delete-iap-screenshot
-                  screenshots upload-screenshot delete-screenshot
+                  screenshots upload-screenshot upload-screenshots delete-screenshot
                   create-version release phased-release pause-release resume-release
                   complete-release enable-phased-release
                   pre-order enable-pre-order cancel-pre-order
@@ -233,16 +233,29 @@ module AppStoreConnect
       result = client.submission_readiness
 
       if result[:ready]
-        puts "\e[32mApp appears ready for submission!\e[0m"
+        puts "\e[32m✓ App appears ready for submission!\e[0m"
       else
         puts "\e[31mIssues found:\e[0m"
         result[:issues].each do |issue|
-          puts "  - #{issue}"
+          puts "  ✗ #{issue}"
         end
       end
 
       puts
       puts "Current state: #{result[:current_state]}"
+
+      # Show screenshot status
+      if result[:screenshots] && result[:screenshots][:total] > 0
+        puts
+        puts "\e[1mScreenshots:\e[0m"
+        result[:screenshots][:by_type].each do |type, count|
+          puts "  #{type}: #{count} screenshot(s)"
+        end
+        puts "  Total: #{result[:screenshots][:total]}"
+      elsif result[:screenshots]
+        puts
+        puts "\e[33mScreenshots: None uploaded\e[0m"
+      end
     end
 
     def cmd_review_info
@@ -1542,6 +1555,97 @@ module AppStoreConnect
       puts "  Screenshot ID: #{result['data']['id']}"
     end
 
+    # Batch upload screenshots from a directory
+    # Directory structure should be: <display_type>/<filename>.png
+    # Example: APP_IPHONE_67/screenshot1.png, APP_IPAD_PRO_129/screenshot1.png
+    def cmd_upload_screenshots
+      if @options.length < 2
+        puts "\e[31mUsage: asc upload-screenshots <locale> <directory>\e[0m"
+        puts 'Example: asc upload-screenshots en-US ~/Desktop/screenshots'
+        puts
+        puts 'Directory structure should contain folders named by display type:'
+        puts '  screenshots/'
+        puts '    APP_IPHONE_67/'
+        puts '      screenshot1.png'
+        puts '      screenshot2.png'
+        puts '    APP_IPAD_PRO_129/'
+        puts '      screenshot1.png'
+        puts
+        puts 'Supported display types:'
+        puts '  APP_IPHONE_67      - iPhone 6.7" (1290 x 2796)'
+        puts '  APP_IPHONE_65      - iPhone 6.5" (1242 x 2688)'
+        puts '  APP_IPHONE_55      - iPhone 5.5" (1242 x 2208)'
+        puts '  APP_IPAD_PRO_129   - iPad Pro 12.9" (2048 x 2732)'
+        puts '  APP_IPAD_PRO_11    - iPad Pro 11" (1668 x 2388)'
+        exit 1
+      end
+
+      locale = @options[0]
+      directory = File.expand_path(@options[1])
+
+      unless Dir.exist?(directory)
+        puts "\e[31mDirectory not found: #{directory}\e[0m"
+        exit 1
+      end
+
+      # Find the version and localization
+      versions = client.app_store_versions
+      active_version = versions.find { |v| v.dig('attributes', 'appStoreState') == 'PREPARE_FOR_SUBMISSION' }
+
+      unless active_version
+        puts "\e[31mNo version in PREPARE_FOR_SUBMISSION state.\e[0m"
+        exit 1
+      end
+
+      version_id = active_version['id']
+      locs = client.app_store_version_localizations(version_id: version_id)
+      loc = locs.find { |l| l[:locale] == locale }
+
+      unless loc
+        puts "\e[31mLocalization not found: #{locale}\e[0m"
+        puts "Available: #{locs.map { |l| l[:locale] }.join(', ')}"
+        exit 1
+      end
+
+      display_types = %w[APP_IPHONE_67 APP_IPHONE_65 APP_IPHONE_55 APP_IPAD_PRO_129 APP_IPAD_PRO_11]
+      uploaded = 0
+      errors = []
+
+      display_types.each do |display_type|
+        type_dir = File.join(directory, display_type)
+        next unless Dir.exist?(type_dir)
+
+        # Get existing screenshot set or create one
+        sets = client.app_screenshot_sets(localization_id: loc[:id])
+        set = sets.find { |s| s[:screenshot_display_type] == display_type }
+
+        unless set
+          puts "Creating screenshot set for #{display_type}..."
+          result = client.create_app_screenshot_set(localization_id: loc[:id], display_type: display_type)
+          set = { id: result['data']['id'] }
+        end
+
+        # Upload each image file
+        image_files = Dir.glob(File.join(type_dir, '*.{png,jpg,jpeg,PNG,JPG,JPEG}')).sort
+        image_files.each do |file_path|
+          puts "Uploading #{display_type}/#{File.basename(file_path)}..."
+          begin
+            client.upload_app_screenshot(screenshot_set_id: set[:id], file_path: file_path)
+            uploaded += 1
+          rescue StandardError => e
+            errors << "#{display_type}/#{File.basename(file_path)}: #{e.message}"
+          end
+        end
+      end
+
+      puts
+      puts "\e[32mUploaded #{uploaded} screenshot(s)\e[0m"
+      if errors.any?
+        puts "\e[31mErrors:\e[0m"
+        errors.each { |e| puts "  - #{e}" }
+      end
+    end
+
     def cmd_delete_screenshot
       if @options.empty?
         puts "\e[31mUsage: asc delete-screenshot <screenshot_id>\e[0m"
@@ -2729,6 +2833,7 @@ module AppStoreConnect
           upload-iap-screenshot <id> <file>     Upload IAP review screenshot
           delete-iap-screenshot <id>            Delete IAP review screenshot
           upload-screenshot <type> <locale> <file>  Upload app screenshot
+          upload-screenshots <locale> <dir>    Batch upload from directory
           delete-screenshot <id>                Delete app screenshot
 
         \e[1mRELEASE AUTOMATION:\e[0m
