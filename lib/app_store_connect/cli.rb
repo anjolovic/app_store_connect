@@ -194,33 +194,34 @@ module AppStoreConnect
       begin
         threads = client.resolution_center_threads(version_id: rejection[:version_id])
         thread_data = threads['data'] || []
-        included = threads['included'] || []
 
         if thread_data.any?
           puts
           puts "\e[1mResolution Center Messages:\e[0m"
 
           thread_data.each do |thread|
+            thread_id = thread['id']
             thread_type = thread.dig('attributes', 'threadType')
             puts "  Thread: #{thread_type}"
 
-            # Get messages from included data
-            messages_rel = thread.dig('relationships', 'messages', 'data') || []
-            messages_rel.each do |msg_ref|
-              msg = included.find { |i| i['type'] == 'resolutionCenterMessages' && i['id'] == msg_ref['id'] }
-              next unless msg
+            # Fetch messages for this thread
+            begin
+              messages = client.rejection_reasons(thread_id: thread_id)
+              messages.each do |msg|
+                body = msg[:body]
+                from_apple = msg[:from_apple]
+                date = msg[:created_date]
 
-              body = msg.dig('attributes', 'body')
-              from = msg.dig('attributes', 'fromActor')
-              date = msg.dig('attributes', 'createdDate')
-
-              if body
-                puts
-                puts "  \e[1mFrom:\e[0m #{from || 'Apple'}"
-                puts "  \e[1mDate:\e[0m #{date}"
-                puts "  \e[1mMessage:\e[0m"
-                body.split("\n").each { |line| puts "    #{line}" }
+                if body
+                  puts
+                  puts "  \e[1mFrom:\e[0m #{from_apple ? 'Apple' : 'Developer'}"
+                  puts "  \e[1mDate:\e[0m #{date}"
+                  puts "  \e[1mMessage:\e[0m"
+                  body.to_s.split("\n").each { |line| puts "    #{line}" }
+                end
               end
+            rescue StandardError => e
+              puts "  \e[33mCould not fetch messages: #{e.message}\e[0m"
             end
           end
         end

@@ -496,7 +496,7 @@ module AppStoreConnect
     # Resolution Center methods (uses IRIS API)
     # Get resolution center threads for an app store version
     def resolution_center_threads(version_id:)
-      iris_get("/resolutionCenterThreads?filter[appStoreVersion]=#{version_id}&include=messages")
+      iris_get("/resolutionCenterThreads?filter[appStoreVersion]=#{version_id}")
     rescue ApiError => e
       # IRIS API may not be accessible with standard JWT auth
       raise ApiError, "Resolution Center API error: #{e.message}. " \
@@ -505,7 +505,7 @@ module AppStoreConnect
 
     # Get messages from a resolution center thread
     def resolution_center_messages(thread_id:)
-      iris_get("/resolutionCenterThreads/#{thread_id}/messages?include=rejections,fromActors")
+      iris_get("/resolutionCenterThreads/#{thread_id}/resolutionCenterMessages")
     rescue ApiError => e
       raise ApiError, "Resolution Center messages error: #{e.message}"
     end
@@ -514,26 +514,13 @@ module AppStoreConnect
     def rejection_reasons(thread_id:)
       result = resolution_center_messages(thread_id: thread_id)
       messages = result['data'] || []
-      included = result['included'] || []
 
       messages.map do |msg|
-        rejections = msg.dig('relationships', 'rejections', 'data') || []
-        rejection_details = rejections.map do |rej|
-          included.find { |i| i['type'] == 'reviewRejections' && i['id'] == rej['id'] }
-        end.compact
-
         {
           id: msg['id'],
           body: msg.dig('attributes', 'body'),
           created_date: msg.dig('attributes', 'createdDate'),
-          from: msg.dig('attributes', 'fromActor'),
-          rejections: rejection_details.map do |r|
-            {
-              id: r['id'],
-              reason: r.dig('attributes', 'reason'),
-              guideline: r.dig('attributes', 'guideline')
-            }
-          end
+          from_apple: msg.dig('attributes', 'isFromApple')
         }
       end
     end
