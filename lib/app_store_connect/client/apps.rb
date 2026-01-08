@@ -164,22 +164,34 @@ module AppStoreConnect
 
         # Get versions to find rejected one
         versions = app_store_versions(target_app_id: target_app_id)
-        rejected = versions.find { |v| v.dig('attributes', 'appStoreState') == 'REJECTED' }
 
-        return nil unless rejected
+        # Check for any rejection state (REJECTED, METADATA_REJECTED, DEVELOPER_REJECTED, INVALID_BINARY)
+        rejection_states = %w[REJECTED METADATA_REJECTED DEVELOPER_REJECTED INVALID_BINARY]
+        rejected = versions.find { |v| rejection_states.include?(v.dig('attributes', 'appStoreState')) }
 
-        # Get review submissions to find the one with rejection details
+        # Get review submissions to find any with unresolved issues
         submissions = review_submissions(target_app_id: target_app_id, limit: 20)
 
-        # Find submission that matches the rejected version
+        # Find submission with unresolved issues (rejection pending resolution)
         rejection_submission = submissions.find do |sub|
           sub.dig('attributes', 'state') == 'UNRESOLVED_ISSUES'
         end
 
+        # If no rejected version but there's an unresolved submission, find the related version
+        if !rejected && rejection_submission
+          # Get the most recent non-ready version as likely the one with issues
+          rejected = versions.find do |v|
+            state = v.dig('attributes', 'appStoreState')
+            %w[PREPARE_FOR_SUBMISSION WAITING_FOR_REVIEW IN_REVIEW].include?(state)
+          end
+        end
+
+        return nil unless rejected || rejection_submission
+
         {
-          version_id: rejected['id'],
-          version_string: rejected.dig('attributes', 'versionString'),
-          state: rejected.dig('attributes', 'appStoreState'),
+          version_id: rejected&.dig('id'),
+          version_string: rejected&.dig('attributes', 'versionString'),
+          state: rejected&.dig('attributes', 'appStoreState'),
           submission_id: rejection_submission&.dig('id'),
           submission_state: rejection_submission&.dig('attributes', 'state')
         }

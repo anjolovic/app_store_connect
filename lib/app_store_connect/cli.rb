@@ -157,10 +157,17 @@ module AppStoreConnect
         return
       end
 
-      puts "\e[31mVersion #{rejection[:version_string]} was REJECTED\e[0m"
+      if rejection[:state] && %w[REJECTED METADATA_REJECTED INVALID_BINARY].include?(rejection[:state])
+        puts "\e[31mVersion #{rejection[:version_string]} was REJECTED\e[0m"
+      elsif rejection[:submission_state] == 'UNRESOLVED_ISSUES'
+        puts "\e[31mSubmission has UNRESOLVED ISSUES (rejection pending)\e[0m"
+        puts "Version: #{rejection[:version_string]}" if rejection[:version_string]
+      else
+        puts "\e[33mVersion #{rejection[:version_string]} - #{rejection[:state]}\e[0m"
+      end
       puts
-      puts "Version ID: #{rejection[:version_id]}"
-      puts "State: #{rejection[:state]}"
+      puts "Version ID: #{rejection[:version_id]}" if rejection[:version_id]
+      puts "State: #{rejection[:state]}" if rejection[:state]
 
       if rejection[:submission_id]
         puts "Submission ID: #{rejection[:submission_id]}"
