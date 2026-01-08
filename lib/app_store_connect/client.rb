@@ -49,6 +49,7 @@ module AppStoreConnect
   #
   class Client
     BASE_URL = 'https://api.appstoreconnect.apple.com/v1'
+    IRIS_URL = 'https://appstoreconnect.apple.com/iris/v1'
 
     # Include domain-specific modules
     include Apps
@@ -483,7 +484,76 @@ module AppStoreConnect
       request(:delete, path, body: body)
     end
 
+    # Resolution Center methods (uses IRIS API)
+    # Get resolution center threads for an app store version
+    def resolution_center_threads(version_id:)
+      iris_get("/resolutionCenterThreads?filter[appStoreVersion]=#{version_id}&include=messages")
+    rescue ApiError => e
+      # IRIS API may not be accessible with standard JWT auth
+      raise ApiError, "Resolution Center API error: #{e.message}. " \
+                      "Note: Detailed rejection messages may require App Store Connect web UI access."
+    end
+
+    # Get messages from a resolution center thread
+    def resolution_center_messages(thread_id:)
+      iris_get("/resolutionCenterThreads/#{thread_id}/messages?include=rejections,fromActors")
+    rescue ApiError => e
+      raise ApiError, "Resolution Center messages error: #{e.message}"
+    end
+
+    # Get rejection reasons for a thread
+    def rejection_reasons(thread_id:)
+      result = resolution_center_messages(thread_id: thread_id)
+      messages = result['data'] || []
+      included = result['included'] || []
+
+      messages.map do |msg|
+        rejections = msg.dig('relationships', 'rejections', 'data') || []
+        rejection_details = rejections.map do |rej|
+          included.find { |i| i['type'] == 'reviewRejections' && i['id'] == rej['id'] }
+        end.compact
+
+        {
+          id: msg['id'],
+          body: msg.dig('attributes', 'body'),
+          created_date: msg.dig('attributes', 'createdDate'),
+          from: msg.dig('attributes', 'fromActor'),
+          rejections: rejection_details.map do |r|
+            {
+              id: r['id'],
+              reason: r.dig('attributes', 'reason'),
+              guideline: r.dig('attributes', 'guideline')
+            }
+          end
+        }
+      end
+    end
+
     private
+
+    # Make request to IRIS API (Apple's internal API for resolution center)
+    def iris_get(path)
+      uri = URI("#{IRIS_URL}#{path}")
+
+      headers = {
+        'Authorization' => "Bearer #{generate_token}",
+        'Content-Type' => 'application/json'
+      }
+
+      response = @http_client.execute(
+        method: :get,
+        url: uri.to_s,
+        headers: headers,
+        body: nil
+      )
+
+      result = response[:body]
+      status_code = response[:status]
+
+      handle_error_response(result, status_code, path) if status_code >= 400
+
+      result
+    end
 
     def request(method, path, params: {}, body: nil)
       uri = URI("#{BASE_URL}#{path}")

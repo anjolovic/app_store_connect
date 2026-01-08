@@ -183,6 +183,46 @@ module AppStoreConnect
         end
       end
 
+      # Try to get Resolution Center messages with actual rejection reason
+      begin
+        threads = client.resolution_center_threads(version_id: rejection[:version_id])
+        thread_data = threads['data'] || []
+        included = threads['included'] || []
+
+        if thread_data.any?
+          puts
+          puts "\e[1mResolution Center Messages:\e[0m"
+
+          thread_data.each do |thread|
+            thread_type = thread.dig('attributes', 'threadType')
+            puts "  Thread: #{thread_type}"
+
+            # Get messages from included data
+            messages_rel = thread.dig('relationships', 'messages', 'data') || []
+            messages_rel.each do |msg_ref|
+              msg = included.find { |i| i['type'] == 'resolutionCenterMessages' && i['id'] == msg_ref['id'] }
+              next unless msg
+
+              body = msg.dig('attributes', 'body')
+              from = msg.dig('attributes', 'fromActor')
+              date = msg.dig('attributes', 'createdDate')
+
+              if body
+                puts
+                puts "  \e[1mFrom:\e[0m #{from || 'Apple'}"
+                puts "  \e[1mDate:\e[0m #{date}"
+                puts "  \e[1mMessage:\e[0m"
+                body.split("\n").each { |line| puts "    #{line}" }
+              end
+            end
+          end
+        end
+      rescue StandardError => e
+        # IRIS API may not work with JWT auth - fall back gracefully
+        puts
+        puts "\e[33mCould not fetch Resolution Center messages: #{e.message}\e[0m"
+      end
+
       # Try to get more rejection details from the version
       begin
         version_info = client.app_store_version_rejection(version_id: rejection[:version_id])
@@ -196,8 +236,8 @@ module AppStoreConnect
       end
 
       puts
-      puts "\e[33mNote: Detailed rejection reasons are available in the Resolution Center\e[0m"
-      puts "      at https://appstoreconnect.apple.com"
+      puts "\e[33mNote: If messages are not shown, check the Resolution Center at:\e[0m"
+      puts "      https://appstoreconnect.apple.com"
     end
 
     def cmd_subs
