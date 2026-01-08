@@ -13,7 +13,7 @@ module AppStoreConnect
   #   asc help        # Show help
   #
   class CLI
-    COMMANDS = %w[status review subs subscriptions builds apps ready help
+    COMMANDS = %w[status review rejection subs subscriptions builds apps ready help
                   review-info update-review-notes update-review-contact update-demo-account cancel-review submit create-review-detail
                   sub-details update-sub-description update-sub-note version-info update-whats-new
                   description update-description keywords update-keywords
@@ -143,6 +143,61 @@ module AppStoreConnect
         puts "   Submitted: #{submitted}"
         puts
       end
+    end
+
+    def cmd_rejection
+      puts "\e[1mRejection Details\e[0m"
+      puts '=' * 50
+      puts
+
+      rejection = client.rejection_info
+
+      unless rejection
+        puts "\e[32mNo rejected versions found.\e[0m"
+        return
+      end
+
+      puts "\e[31mVersion #{rejection[:version_string]} was REJECTED\e[0m"
+      puts
+      puts "Version ID: #{rejection[:version_id]}"
+      puts "State: #{rejection[:state]}"
+
+      if rejection[:submission_id]
+        puts "Submission ID: #{rejection[:submission_id]}"
+        puts "Submission State: #{rejection[:submission_state]}"
+
+        # Try to get review submission items for more details
+        begin
+          items = client.review_submission_items(submission_id: rejection[:submission_id])
+          if items.any?
+            puts
+            puts "\e[1mSubmission Items:\e[0m"
+            items.each do |item|
+              state_color = item[:state] == 'REJECTED' ? "\e[31m" : "\e[32m"
+              resolved = item[:resolved] ? ' (resolved)' : ''
+              puts "  - #{state_color}#{item[:state]}\e[0m#{resolved}"
+            end
+          end
+        rescue StandardError => e
+          puts "\e[33mCould not fetch submission items: #{e.message}\e[0m"
+        end
+      end
+
+      # Try to get more rejection details from the version
+      begin
+        version_info = client.app_store_version_rejection(version_id: rejection[:version_id])
+        if version_info[:rejection_reason]
+          puts
+          puts "\e[1mReview Notes:\e[0m"
+          puts "  #{version_info[:rejection_reason]}"
+        end
+      rescue StandardError => e
+        puts "\e[33mCould not fetch version details: #{e.message}\e[0m"
+      end
+
+      puts
+      puts "\e[33mNote: Detailed rejection reasons are available in the Resolution Center\e[0m"
+      puts "      at https://appstoreconnect.apple.com"
     end
 
     def cmd_subs
@@ -2816,6 +2871,7 @@ module AppStoreConnect
         \e[1mREAD COMMANDS:\e[0m
           status            Full app status summary (default)
           review            Check review submission status
+          rejection         Show rejection details and status
           review-info       Show review contact info and notes
           subs              List subscription products
           sub-details       Detailed subscription info with localizations

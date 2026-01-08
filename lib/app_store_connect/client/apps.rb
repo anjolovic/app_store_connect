@@ -129,6 +129,62 @@ module AppStoreConnect
         get("/apps/#{target_app_id}/reviewSubmissions?limit=#{limit}")['data']
       end
 
+      # Get review submission items (includes rejection state)
+      def review_submission_items(submission_id:)
+        get("/reviewSubmissions/#{submission_id}/items")['data'].map do |item|
+          {
+            id: item['id'],
+            state: item.dig('attributes', 'state'),
+            resolved: item.dig('attributes', 'resolved')
+          }
+        end
+      end
+
+      # Get app store version with rejection info
+      def app_store_version_rejection(version_id:)
+        # Try to get rejection info from the appStoreReviewDetail
+        result = get("/appStoreVersions/#{version_id}?include=appStoreReviewDetail")
+        version = result['data']
+        included = result['included'] || []
+
+        review_detail = included.find { |i| i['type'] == 'appStoreReviewDetails' }
+
+        {
+          id: version['id'],
+          state: version.dig('attributes', 'appStoreState'),
+          version_string: version.dig('attributes', 'versionString'),
+          rejection_reason: review_detail&.dig('attributes', 'notes'),
+          review_detail_id: review_detail&.dig('id')
+        }
+      end
+
+      # Get rejection details from most recent rejected submission
+      def rejection_info(target_app_id: nil)
+        target_app_id ||= @app_id
+
+        # Get versions to find rejected one
+        versions = app_store_versions(target_app_id: target_app_id)
+        rejected = versions.find { |v| v.dig('attributes', 'appStoreState') == 'REJECTED' }
+
+        return nil unless rejected
+
+        # Get review submissions to find the one with rejection details
+        submissions = review_submissions(target_app_id: target_app_id, limit: 20)
+
+        # Find submission that matches the rejected version
+        rejection_submission = submissions.find do |sub|
+          sub.dig('attributes', 'state') == 'UNRESOLVED_ISSUES'
+        end
+
+        {
+          version_id: rejected['id'],
+          version_string: rejected.dig('attributes', 'versionString'),
+          state: rejected.dig('attributes', 'appStoreState'),
+          submission_id: rejection_submission&.dig('id'),
+          submission_state: rejection_submission&.dig('attributes', 'state')
+        }
+      end
+
       # Get builds
       def builds(target_app_id: nil, limit: 10)
         target_app_id ||= @app_id
