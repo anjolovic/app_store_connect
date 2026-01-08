@@ -20,6 +20,7 @@ require_relative 'client/pricing'
 require_relative 'client/users'
 require_relative 'client/screenshots'
 require_relative 'client/privacy'
+require_relative 'session'
 
 module AppStoreConnect
   # App Store Connect API client for checking app status, review submissions,
@@ -93,10 +94,18 @@ module AppStoreConnect
         use_curl: curl
       )
 
+      # Initialize session for IRIS API (Resolution Center)
+      @session = Session.new
+
       validate_configuration!
     end
 
-    attr_reader :app_id, :bundle_id
+    attr_reader :app_id, :bundle_id, :session
+
+    # Check if session-based auth is available (for Resolution Center access)
+    def session_available?
+      @session&.valid?
+    end
 
     # ─────────────────────────────────────────────────────────────────────────
     # App Store Version Localizations
@@ -532,13 +541,22 @@ module AppStoreConnect
     private
 
     # Make request to IRIS API (Apple's internal API for resolution center)
+    # Uses session cookies if available, falls back to JWT auth
     def iris_get(path)
       uri = URI("#{IRIS_URL}#{path}")
 
       headers = {
-        'Authorization' => "Bearer #{generate_token}",
-        'Content-Type' => 'application/json'
+        'Content-Type' => 'application/json',
+        'Accept' => 'application/json'
       }
+
+      # Use session cookies if available (required for Resolution Center)
+      if @session&.valid?
+        headers['Cookie'] = @session.cookie_header
+      else
+        # Fall back to JWT auth (may not work for all IRIS endpoints)
+        headers['Authorization'] = "Bearer #{generate_token}"
+      end
 
       response = @http_client.execute(
         method: :get,
@@ -549,6 +567,14 @@ module AppStoreConnect
 
       result = response[:body]
       status_code = response[:status]
+
+      # Provide helpful error message if session auth is needed
+      if status_code == 401 || status_code == 403
+        unless @session&.valid?
+          raise ApiError, "Resolution Center requires session authentication. " \
+                          "Run 'fastlane spaceauth -u YOUR_APPLE_ID' and set FASTLANE_SESSION environment variable."
+        end
+      end
 
       handle_error_response(result, status_code, path) if status_code >= 400
 

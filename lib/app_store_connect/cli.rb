@@ -13,7 +13,7 @@ module AppStoreConnect
   #   asc help        # Show help
   #
   class CLI
-    COMMANDS = %w[status review rejection subs subscriptions builds apps ready help
+    COMMANDS = %w[status review rejection session subs subscriptions builds apps ready help
                   review-info update-review-notes update-review-contact update-demo-account cancel-review submit create-review-detail
                   sub-details update-sub-description update-sub-note version-info update-whats-new
                   description update-description keywords update-keywords
@@ -245,6 +245,35 @@ module AppStoreConnect
       puts
       puts "\e[33mNote: If messages are not shown, check the Resolution Center at:\e[0m"
       puts "      https://appstoreconnect.apple.com"
+    end
+
+    def cmd_session
+      puts "\e[1mSession Status\e[0m"
+      puts '=' * 50
+      puts
+
+      if client.session_available?
+        puts "\e[32m✓ Session available\e[0m"
+        puts "  Resolution Center access: enabled"
+        puts "  Rejection messages: available"
+      else
+        puts "\e[33m✗ No session found\e[0m"
+        puts
+        puts "To enable Resolution Center access (rejection messages):"
+        puts
+        puts "  1. Install fastlane (if not installed):"
+        puts "     \e[36mgem install fastlane\e[0m"
+        puts
+        puts "  2. Generate session token:"
+        puts "     \e[36mfastlane spaceauth -u your@apple.id\e[0m"
+        puts
+        puts "  3. Set the environment variable:"
+        puts "     \e[36mexport FASTLANE_SESSION=\"...\"\e[0m"
+        puts "     (copy the output from step 2)"
+        puts
+        puts "  4. Run rejection command again:"
+        puts "     \e[36masc rejection\e[0m"
+      end
     end
 
     def cmd_subs
@@ -2918,7 +2947,8 @@ module AppStoreConnect
         \e[1mREAD COMMANDS:\e[0m
           status            Full app status summary (default)
           review            Check review submission status
-          rejection         Show rejection details and status
+          rejection         Show rejection details and messages
+          session           Check session status for Resolution Center
           review-info       Show review contact info and notes
           subs              List subscription products
           sub-details       Detailed subscription info with localizations
@@ -3039,6 +3069,26 @@ module AppStoreConnect
            mkdir -p ~/.config/app_store_connect/keys
            mv AuthKey_XXXX.p8 ~/.config/app_store_connect/keys/
            chmod 600 ~/.config/app_store_connect/keys/AuthKey_XXXX.p8
+
+        \e[1mRESOLUTION CENTER (optional):\e[0m
+
+        To access rejection messages from Apple's Resolution Center, you need
+        a web session. This uses fastlane's authentication:
+
+        1. Install fastlane:
+           gem install fastlane
+
+        2. Generate a session:
+           fastlane spaceauth -u your@apple.id
+
+        3. Copy the session string and set the environment variable:
+           export FASTLANE_SESSION="---\n- ..."
+
+        4. Verify session is working:
+           asc session
+
+        Note: Sessions expire after ~30 days. Re-run spaceauth when expired.
+        Without a session, `asc rejection` shows status but not Apple's message.
 
         \e[1mEXAMPLES:\e[0m
           asc                           # Show full status
