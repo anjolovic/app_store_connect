@@ -192,7 +192,12 @@ module AppStoreConnect
 
       # Try to get Resolution Center messages with actual rejection reason
       begin
-        threads = client.resolution_center_threads(version_id: rejection[:version_id])
+        unless rejection[:submission_id]
+          puts "\e[33mNo submission ID found - cannot fetch Resolution Center messages\e[0m"
+          raise StandardError, 'No submission ID'
+        end
+
+        threads = client.resolution_center_threads(submission_id: rejection[:submission_id])
         thread_data = threads['data'] || []
 
         if thread_data.any?
@@ -209,21 +214,31 @@ module AppStoreConnect
               messages = client.rejection_reasons(thread_id: thread_id)
               messages.each do |msg|
                 body = msg[:body]
-                from_apple = msg[:from_apple]
                 date = msg[:created_date]
 
                 if body
                   puts
-                  puts "  \e[1mFrom:\e[0m #{from_apple ? 'Apple' : 'Developer'}"
                   puts "  \e[1mDate:\e[0m #{date}"
                   puts "  \e[1mMessage:\e[0m"
-                  body.to_s.split("\n").each { |line| puts "    #{line}" }
+                  # Strip HTML tags for CLI display
+                  plain_text = body.to_s
+                                   .gsub(/<br\s*\/?>/, "\n")
+                                   .gsub(/<\/p>/, "\n")
+                                   .gsub(/<[^>]+>/, '')
+                                   .gsub(/&nbsp;/, ' ')
+                                   .gsub(/&amp;/, '&')
+                                   .gsub(/&lt;/, '<')
+                                   .gsub(/&gt;/, '>')
+                                   .gsub(/&quot;/, '"')
+                  plain_text.split("\n").each { |line| puts "    #{line.strip}" unless line.strip.empty? }
                 end
               end
             rescue StandardError => e
               puts "  \e[33mCould not fetch messages: #{e.message}\e[0m"
             end
           end
+        else
+          puts "\e[33mNo Resolution Center threads found for this submission\e[0m"
         end
       rescue StandardError => e
         # IRIS API may not work with JWT auth - fall back gracefully

@@ -494,9 +494,9 @@ module AppStoreConnect
     end
 
     # Resolution Center methods (uses IRIS API)
-    # Get resolution center threads for an app store version
-    def resolution_center_threads(version_id:)
-      iris_get("/resolutionCenterThreads?filter[appStoreVersion]=#{version_id}")
+    # Get resolution center threads for a review submission
+    def resolution_center_threads(submission_id:)
+      iris_get("/resolutionCenterThreads?filter[reviewSubmission]=#{submission_id}")
     rescue ApiError => e
       # IRIS API may not be accessible with standard JWT auth
       raise ApiError, "Resolution Center API error: #{e.message}. " \
@@ -510,7 +510,7 @@ module AppStoreConnect
       raise ApiError, "Resolution Center messages error: #{e.message}"
     end
 
-    # Get rejection reasons for a thread
+    # Get rejection messages for a thread
     def rejection_reasons(thread_id:)
       result = resolution_center_messages(thread_id: thread_id)
       messages = result['data'] || []
@@ -518,9 +518,8 @@ module AppStoreConnect
       messages.map do |msg|
         {
           id: msg['id'],
-          body: msg.dig('attributes', 'body'),
-          created_date: msg.dig('attributes', 'createdDate'),
-          from_apple: msg.dig('attributes', 'isFromApple')
+          body: msg.dig('attributes', 'messageBody'),
+          created_date: msg.dig('attributes', 'createdDate')
         }
       end
     end
