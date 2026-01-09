@@ -87,6 +87,18 @@ module AppStoreConnect
                 }
               })
       end
+
+      # Delete a subscription
+      # Note: Can only delete subscriptions that have never been submitted for review
+      def delete_subscription(subscription_id:)
+        delete("/subscriptions/#{subscription_id}")
+      end
+
+      # Delete a subscription group
+      # Note: Can only delete empty groups (no subscriptions)
+      def delete_subscription_group(group_id:)
+        delete("/subscriptionGroups/#{group_id}")
+      end
     end
   end
 end
