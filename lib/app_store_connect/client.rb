@@ -305,6 +305,39 @@ module AppStoreConnect
     end
 
     # ─────────────────────────────────────────────────────────────────────────
+    # Content Rights Declaration
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Get content rights declaration for a version
+    # Returns whether app uses third-party content and if rights are declared
+    def content_rights_declaration(version_id:)
+      result = get("/appStoreVersions/#{version_id}")['data']
+      return nil unless result
+
+      {
+        id: result['id'],
+        version_string: result.dig('attributes', 'versionString'),
+        uses_third_party_content: result.dig('attributes', 'usesThirdPartyContent'),
+        # If usesThirdPartyContent is true, user must confirm they have rights
+        state: result.dig('attributes', 'appStoreState')
+      }
+    end
+
+    # Update content rights declaration
+    # uses_third_party_content: true if app contains/displays/accesses third-party content
+    def update_content_rights(version_id:, uses_third_party_content:)
+      patch("/appStoreVersions/#{version_id}", body: {
+              data: {
+                type: 'appStoreVersions',
+                id: version_id,
+                attributes: {
+                  usesThirdPartyContent: uses_third_party_content
+                }
+              }
+            })
+    end
+
+    # ─────────────────────────────────────────────────────────────────────────
     # App Info Methods
     # ─────────────────────────────────────────────────────────────────────────
 

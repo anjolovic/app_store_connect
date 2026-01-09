@@ -34,7 +34,8 @@ module AppStoreConnect
                   app-info age-rating categories update-app-name update-subtitle
                   availability territories pricing
                   users invitations invite-user remove-user cancel-invitation
-                  privacy-labels privacy-types privacy-purposes].freeze
+                  privacy-labels privacy-types privacy-purposes
+                  content-rights set-content-rights].freeze
 
     def initialize(args)
       @command = args.first || 'status'
@@ -447,6 +448,97 @@ module AppStoreConnect
       rescue ApiError => e
         puts "\e[33mCould not fetch review detail: #{e.message}\e[0m"
       end
+    end
+
+    def cmd_content_rights
+      puts "\e[1mContent Rights Declaration\e[0m"
+      puts '=' * 50
+      puts
+
+      # Get the version that's being prepared or waiting for review
+      versions = client.app_store_versions
+      active_version = versions.find { |v| v.dig('attributes', 'appStoreState') == 'PREPARE_FOR_SUBMISSION' }
+      active_version ||= versions.find { |v| v.dig('attributes', 'appStoreState') == 'WAITING_FOR_REVIEW' }
+
+      unless active_version
+        puts 'No active version found.'
+        return
+      end
+
+      version_id = active_version['id']
+      version_string = active_version.dig('attributes', 'versionString')
+      puts "Version: #{version_string}"
+      puts
+
+      begin
+        rights = client.content_rights_declaration(version_id: version_id)
+        uses_content = rights[:uses_third_party_content]
+
+        if uses_content.nil?
+          puts "\e[33mContent rights not yet declared.\e[0m"
+          puts
+          puts 'Does your app contain, display, or access third-party content?'
+          puts '  - User-generated content (photos, videos, posts)'
+          puts '  - Content from social media, news feeds, or APIs'
+          puts '  - Third-party images, audio, or video'
+          puts
+          puts 'Set with: asc set-content-rights yes   (uses third-party content)'
+          puts '          asc set-content-rights no    (does NOT use third-party content)'
+        elsif uses_content
+          puts "\e[32m✓ Uses Third-Party Content: YES\e[0m"
+          puts '  You have declared that your app uses third-party content'
+          puts '  and you have the rights to use it.'
+        else
+          puts "\e[32m✓ Uses Third-Party Content: NO\e[0m"
+          puts '  You have declared that your app does NOT use third-party content.'
+        end
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+    end
+
+    def cmd_set_content_rights
+      if @options.empty?
+        puts "\e[31mUsage: asc set-content-rights <yes|no>\e[0m"
+        puts
+        puts 'yes - App contains/displays/accesses third-party content'
+        puts '      (and you have rights to use it)'
+        puts 'no  - App does NOT contain third-party content'
+        return
+      end
+
+      answer = @options.first.downcase
+      unless %w[yes no true false 1 0].include?(answer)
+        puts "\e[31mInvalid value. Use 'yes' or 'no'.\e[0m"
+        return
+      end
+
+      uses_content = %w[yes true 1].include?(answer)
+
+      # Get the version being prepared
+      versions = client.app_store_versions
+      active_version = versions.find { |v| v.dig('attributes', 'appStoreState') == 'PREPARE_FOR_SUBMISSION' }
+
+      unless active_version
+        puts "\e[31mNo version in PREPARE_FOR_SUBMISSION state.\e[0m"
+        puts 'Content rights can only be set for versions being prepared for submission.'
+        return
+      end
+
+      version_id = active_version['id']
+      version_string = active_version.dig('attributes', 'versionString')
+
+      puts "Setting content rights for version #{version_string}..."
+      client.update_content_rights(version_id: version_id, uses_third_party_content: uses_content)
+
+      if uses_content
+        puts "\e[32m✓ Content rights set: YES (uses third-party content)\e[0m"
+        puts '  You are confirming you have the necessary rights.'
+      else
+        puts "\e[32m✓ Content rights set: NO (does not use third-party content)\e[0m"
+      end
+    rescue ApiError => e
+      puts "\e[31mError: #{e.message}\e[0m"
     end
 
     def cmd_update_review_notes
@@ -3052,6 +3144,8 @@ module AppStoreConnect
           update-demo-account [options]         Set demo account for App Review
           update-whats-new "text"               Update "What's New" release notes
           create-review-detail                  Create review detail for version
+          content-rights                        Show content rights declaration status
+          set-content-rights <yes|no>           Declare third-party content usage
           update-sub-description <id> "desc"    Update subscription description
           update-sub-note <id> "note"           Update subscription review note
           update-iap-note <id> "note"           Update IAP review notes
@@ -3183,6 +3277,11 @@ module AppStoreConnect
 
           # If your app requires sign-in, set demo account credentials:
           asc update-demo-account --username demo@example.com --password secret123 --required
+
+          # Content rights declaration (required before submission):
+          asc content-rights                     # Check current status
+          asc set-content-rights no              # App doesn't use third-party content
+          asc set-content-rights yes             # App uses third-party content (you have rights)
 
           # If Apple requests updated reviewer notes:
           asc update-review-notes "Use demo account: test@example.com / password123"
