@@ -34,7 +34,8 @@ module AppStoreConnect
                   app-info age-rating categories update-app-name update-subtitle
                   availability territories pricing
                   users invitations invite-user remove-user cancel-invitation
-                  privacy-labels].freeze
+                  privacy-labels privacy-types privacy-purposes
+                  add-privacy-usage delete-privacy-usage].freeze
 
     def initialize(args)
       @command = args.first || 'status'
@@ -2929,6 +2930,120 @@ module AppStoreConnect
       end
     end
 
+    def cmd_privacy_types
+      puts "\e[1mPrivacy Data Types\e[0m"
+      puts '=' * 50
+      puts
+      puts 'Use these IDs with add-privacy-usage command:'
+      puts
+
+      client.privacy_data_types.each do |type|
+        puts "  #{type[:id].ljust(30)} #{type[:name]}"
+      end
+
+      puts
+      puts "\e[33mData Protection Options:\e[0m"
+      puts '  DATA_USED_TO_TRACK_YOU       - Data used to track you'
+      puts '  DATA_LINKED_TO_YOU           - Data linked to you'
+      puts '  DATA_NOT_LINKED_TO_YOU       - Data not linked to you'
+      puts '  DATA_NOT_COLLECTED           - Data not collected'
+    end
+
+    def cmd_privacy_purposes
+      puts "\e[1mPrivacy Purposes\e[0m"
+      puts '=' * 50
+      puts
+      puts 'Use these IDs with add-privacy-usage command:'
+      puts
+
+      client.privacy_purposes.each do |purpose|
+        puts "  #{purpose[:id].ljust(30)} #{purpose[:name]}"
+      end
+    end
+
+    def cmd_add_privacy_usage
+      if @options.empty?
+        puts "\e[31mUsage: asc add-privacy-usage <data_type> [purposes...] [--protection TYPE]\e[0m"
+        puts
+        puts 'Example: asc add-privacy-usage EMAIL_ADDRESS ANALYTICS APP_FUNCTIONALITY --protection DATA_LINKED_TO_YOU'
+        puts
+        puts 'Run "asc privacy-types" to see available data types'
+        puts 'Run "asc privacy-purposes" to see available purposes'
+        return
+      end
+
+      category = @options.first
+      remaining = @options.drop(1)
+
+      # Extract protection option if present
+      protection = nil
+      protection_idx = remaining.index('--protection')
+      if protection_idx
+        protection = remaining[protection_idx + 1]
+        remaining = remaining[0...protection_idx] + remaining[(protection_idx + 2)..]
+      end
+
+      purposes = remaining.reject { |o| o.start_with?('--') }
+
+      # Validate category
+      valid_types = client.privacy_data_types.map { |t| t[:id] }
+      unless valid_types.include?(category)
+        puts "\e[31mInvalid data type: #{category}\e[0m"
+        puts "Run 'asc privacy-types' to see valid options"
+        return
+      end
+
+      # Validate purposes
+      valid_purposes = client.privacy_purposes.map { |p| p[:id] }
+      invalid_purposes = purposes - valid_purposes
+      if invalid_purposes.any?
+        puts "\e[31mInvalid purpose(s): #{invalid_purposes.join(', ')}\e[0m"
+        puts "Run 'asc privacy-purposes' to see valid options"
+        return
+      end
+
+      # Validate protection
+      valid_protections = %w[DATA_USED_TO_TRACK_YOU DATA_LINKED_TO_YOU DATA_NOT_LINKED_TO_YOU DATA_NOT_COLLECTED]
+      if protection && !valid_protections.include?(protection)
+        puts "\e[31mInvalid protection type: #{protection}\e[0m"
+        puts "Valid options: #{valid_protections.join(', ')}"
+        return
+      end
+
+      puts "Adding privacy usage declaration..."
+      puts "  Data Type: #{category}"
+      puts "  Purposes: #{purposes.any? ? purposes.join(', ') : 'None'}"
+      puts "  Protection: #{protection || 'Not specified'}"
+
+      client.create_app_data_usage(
+        category: category,
+        purposes: purposes.any? ? purposes : nil,
+        data_protection: protection
+      )
+
+      puts
+      puts "\e[32m✓ Privacy usage added successfully!\e[0m"
+    rescue ApiError => e
+      puts "\e[31mError: #{e.message}\e[0m"
+    end
+
+    def cmd_delete_privacy_usage
+      if @options.empty?
+        puts "\e[31mUsage: asc delete-privacy-usage <usage_id>\e[0m"
+        puts
+        puts 'Run "asc privacy-labels" to see current usages and their IDs'
+        return
+      end
+
+      usage_id = @options.first
+
+      puts "Deleting privacy usage: #{usage_id}..."
+      client.delete_app_data_usage(usage_id: usage_id)
+      puts "\e[32m✓ Privacy usage deleted!\e[0m"
+    rescue ApiError => e
+      puts "\e[31mError: #{e.message}\e[0m"
+    end
+
     def find_active_phased_release
       versions = client.app_store_versions
       active_version = versions.find { |v| v.dig('attributes', 'appStoreState') == 'READY_FOR_SALE' }
@@ -3049,7 +3164,13 @@ module AppStoreConnect
           availability                          Show app territory availability
           territories                           List all territories
           pricing                               Show app pricing info
-          privacy-labels                        Show app privacy declarations
+
+        \e[1mAPP PRIVACY:\e[0m
+          privacy-labels                        Show current privacy declarations
+          privacy-types                         List available data types
+          privacy-purposes                      List available purposes
+          add-privacy-usage <type> [purposes]   Add privacy data usage
+          delete-privacy-usage <id>             Delete privacy data usage
 
         \e[1mUSER MANAGEMENT:\e[0m
           users                                 List team users
@@ -3211,8 +3332,21 @@ module AppStoreConnect
           asc territories                    # All territories
           asc pricing                        # Price points
 
-          # Privacy labels:
-          asc privacy-labels                 # Data usage declarations
+        \e[1mAPP PRIVACY (completing the questionnaire):\e[0m
+          # View available options:
+          asc privacy-types                  # List data types (EMAIL_ADDRESS, etc.)
+          asc privacy-purposes               # List purposes (ANALYTICS, etc.)
+
+          # View current declarations:
+          asc privacy-labels                 # Show what's declared
+
+          # Add a privacy data usage:
+          asc add-privacy-usage EMAIL_ADDRESS ANALYTICS --protection DATA_LINKED_TO_YOU
+          asc add-privacy-usage CRASH_DATA ANALYTICS APP_FUNCTIONALITY --protection DATA_NOT_LINKED_TO_YOU
+          asc add-privacy-usage DEVICE_ID THIRD_PARTY_ADVERTISING --protection DATA_USED_TO_TRACK_YOU
+
+          # Delete a declaration:
+          asc delete-privacy-usage usage_id
 
         \e[1mUSER MANAGEMENT:\e[0m
           # View team:
