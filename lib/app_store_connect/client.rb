@@ -416,60 +416,6 @@ module AppStoreConnect
     end
 
     # ─────────────────────────────────────────────────────────────────────────
-    # App Privacy Methods
-    # ─────────────────────────────────────────────────────────────────────────
-
-    # Get privacy data types
-    def privacy_data_types
-      [
-        { id: 'NAME', name: 'Name' },
-        { id: 'EMAIL_ADDRESS', name: 'Email Address' },
-        { id: 'PHONE_NUMBER', name: 'Phone Number' },
-        { id: 'PHYSICAL_ADDRESS', name: 'Physical Address' },
-        { id: 'OTHER_USER_CONTACT_INFO', name: 'Other User Contact Info' },
-        { id: 'HEALTH', name: 'Health' },
-        { id: 'FITNESS', name: 'Fitness' },
-        { id: 'PAYMENT_INFO', name: 'Payment Info' },
-        { id: 'CREDIT_INFO', name: 'Credit Info' },
-        { id: 'OTHER_FINANCIAL_INFO', name: 'Other Financial Info' },
-        { id: 'PRECISE_LOCATION', name: 'Precise Location' },
-        { id: 'COARSE_LOCATION', name: 'Coarse Location' },
-        { id: 'SENSITIVE_INFO', name: 'Sensitive Info' },
-        { id: 'CONTACTS', name: 'Contacts' },
-        { id: 'EMAILS_OR_TEXT_MESSAGES', name: 'Emails or Text Messages' },
-        { id: 'PHOTOS_OR_VIDEOS', name: 'Photos or Videos' },
-        { id: 'AUDIO_DATA', name: 'Audio Data' },
-        { id: 'GAMEPLAY_CONTENT', name: 'Gameplay Content' },
-        { id: 'CUSTOMER_SUPPORT', name: 'Customer Support' },
-        { id: 'OTHER_USER_CONTENT', name: 'Other User Content' },
-        { id: 'BROWSING_HISTORY', name: 'Browsing History' },
-        { id: 'SEARCH_HISTORY', name: 'Search History' },
-        { id: 'USER_ID', name: 'User ID' },
-        { id: 'DEVICE_ID', name: 'Device ID' },
-        { id: 'PURCHASE_HISTORY', name: 'Purchase History' },
-        { id: 'PRODUCT_INTERACTION', name: 'Product Interaction' },
-        { id: 'ADVERTISING_DATA', name: 'Advertising Data' },
-        { id: 'OTHER_USAGE_DATA', name: 'Other Usage Data' },
-        { id: 'CRASH_DATA', name: 'Crash Data' },
-        { id: 'PERFORMANCE_DATA', name: 'Performance Data' },
-        { id: 'OTHER_DIAGNOSTIC_DATA', name: 'Other Diagnostic Data' },
-        { id: 'OTHER_DATA', name: 'Other Data Types' }
-      ]
-    end
-
-    # Get privacy purposes
-    def privacy_purposes
-      [
-        { id: 'THIRD_PARTY_ADVERTISING', name: 'Third-Party Advertising' },
-        { id: 'DEVELOPERS_ADVERTISING', name: "Developer's Advertising or Marketing" },
-        { id: 'ANALYTICS', name: 'Analytics' },
-        { id: 'PRODUCT_PERSONALIZATION', name: 'Product Personalization' },
-        { id: 'APP_FUNCTIONALITY', name: 'App Functionality' },
-        { id: 'OTHER_PURPOSES', name: 'Other Purposes' }
-      ]
-    end
-
-    # ─────────────────────────────────────────────────────────────────────────
     # Low-level HTTP methods
     # ─────────────────────────────────────────────────────────────────────────
 

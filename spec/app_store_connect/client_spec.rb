@@ -446,62 +446,6 @@ RSpec.describe AppStoreConnect::Client do
     end
   end
 
-  describe "#app_data_usages" do
-    let(:data_usages_response) do
-      {
-        data: [
-          {
-            id: "usage123",
-            type: "appDataUsages",
-            attributes: {
-              category: "ANALYTICS"
-            },
-            relationships: {
-              purposes: {
-                data: [
-                  { type: "appDataUsagePurposes", id: "ANALYTICS" }
-                ]
-              },
-              dataProtection: {
-                data: { type: "appDataUsageDataProtections", id: "dp123" }
-              }
-            }
-          }
-        ],
-        included: [
-          {
-            id: "dp123",
-            type: "appDataUsageDataProtections",
-            attributes: {
-              dataProtection: "DATA_NOT_LINKED_TO_YOU"
-            }
-          }
-        ]
-      }
-    end
-
-    before do
-      stub_api_get(
-        "/apps/123456789/appDataUsages?include=dataProtection",
-        response_body: data_usages_response
-      )
-    end
-
-    it "returns a list of data usages" do
-      usages = client.app_data_usages
-      expect(usages).to be_an(Array)
-      expect(usages.length).to eq(1)
-    end
-
-    it "returns data usage with correct attributes" do
-      usage = client.app_data_usages.first
-      expect(usage[:id]).to eq("usage123")
-      expect(usage[:category]).to eq("ANALYTICS")
-      expect(usage[:purposes]).to eq(["ANALYTICS"])
-      expect(usage[:data_protection]).to eq("DATA_NOT_LINKED_TO_YOU")
-    end
-  end
-
   describe "#delete_app_screenshot" do
     before do
       stub_api_delete("/appScreenshots/ss123")

@@ -2,83 +2,107 @@
 
 module AppStoreConnect
   class Client
-    # App privacy and data usage methods
+    # App privacy reference data
+    # NOTE: Apple's API does NOT support creating/reading/deleting privacy declarations.
+    # The App Privacy questionnaire must be completed via App Store Connect web UI.
+    # These methods provide reference data for documentation purposes.
     module Privacy
-      # Get app data usage declarations (privacy labels)
-      def app_data_usages(target_app_id: nil)
-        target_app_id ||= @app_id
-        result = get("/apps/#{target_app_id}/appDataUsages?include=dataProtection")
+      # Reference: All available privacy data types (categories)
+      # Use these when completing the App Privacy questionnaire in App Store Connect
+      def privacy_data_types
+        [
+          # Contact Info
+          { id: 'NAME', name: 'Name', category: 'Contact Info' },
+          { id: 'EMAIL_ADDRESS', name: 'Email Address', category: 'Contact Info' },
+          { id: 'PHONE_NUMBER', name: 'Phone Number', category: 'Contact Info' },
+          { id: 'PHYSICAL_ADDRESS', name: 'Physical Address', category: 'Contact Info' },
+          { id: 'OTHER_USER_CONTACT_INFO', name: 'Other User Contact Info', category: 'Contact Info' },
 
-        usages = result['data'] || []
-        included = result['included'] || []
+          # Health & Fitness
+          { id: 'HEALTH', name: 'Health', category: 'Health & Fitness' },
+          { id: 'FITNESS', name: 'Fitness', category: 'Health & Fitness' },
 
-        usages.map do |usage|
-          protection_id = usage.dig('relationships', 'dataProtection', 'data', 'id')
-          protection = included.find { |i| i['type'] == 'appDataUsageDataProtections' && i['id'] == protection_id }
+          # Financial Info
+          { id: 'PAYMENT_INFO', name: 'Payment Info', category: 'Financial Info' },
+          { id: 'CREDIT_INFO', name: 'Credit Info', category: 'Financial Info' },
+          { id: 'OTHER_FINANCIAL_INFO', name: 'Other Financial Info', category: 'Financial Info' },
 
-          {
-            id: usage['id'],
-            category: usage.dig('attributes', 'category'),
-            purposes: extract_purposes(usage),
-            data_protection: protection&.dig('attributes', 'dataProtection')
-          }
-        end
-      rescue ApiError => e
-        return [] if e.message.include?('Not found')
+          # Location
+          { id: 'PRECISE_LOCATION', name: 'Precise Location', category: 'Location' },
+          { id: 'COARSE_LOCATION', name: 'Coarse Location', category: 'Location' },
 
-        raise
+          # Sensitive Info
+          { id: 'SENSITIVE_INFO', name: 'Sensitive Info', category: 'Sensitive Info' },
+
+          # Contacts
+          { id: 'CONTACTS', name: 'Contacts', category: 'Contacts' },
+
+          # User Content
+          { id: 'EMAILS_OR_TEXT_MESSAGES', name: 'Emails or Text Messages', category: 'User Content' },
+          { id: 'PHOTOS_OR_VIDEOS', name: 'Photos or Videos', category: 'User Content' },
+          { id: 'AUDIO_DATA', name: 'Audio Data', category: 'User Content' },
+          { id: 'GAMEPLAY_CONTENT', name: 'Gameplay Content', category: 'User Content' },
+          { id: 'CUSTOMER_SUPPORT', name: 'Customer Support', category: 'User Content' },
+          { id: 'OTHER_USER_CONTENT', name: 'Other User Content', category: 'User Content' },
+
+          # Browsing History
+          { id: 'BROWSING_HISTORY', name: 'Browsing History', category: 'Browsing History' },
+
+          # Search History
+          { id: 'SEARCH_HISTORY', name: 'Search History', category: 'Search History' },
+
+          # Identifiers
+          { id: 'USER_ID', name: 'User ID', category: 'Identifiers' },
+          { id: 'DEVICE_ID', name: 'Device ID', category: 'Identifiers' },
+
+          # Purchases
+          { id: 'PURCHASE_HISTORY', name: 'Purchase History', category: 'Purchases' },
+
+          # Usage Data
+          { id: 'PRODUCT_INTERACTION', name: 'Product Interaction', category: 'Usage Data' },
+          { id: 'ADVERTISING_DATA', name: 'Advertising Data', category: 'Usage Data' },
+          { id: 'OTHER_USAGE_DATA', name: 'Other Usage Data', category: 'Usage Data' },
+
+          # Diagnostics
+          { id: 'CRASH_DATA', name: 'Crash Data', category: 'Diagnostics' },
+          { id: 'PERFORMANCE_DATA', name: 'Performance Data', category: 'Diagnostics' },
+          { id: 'OTHER_DIAGNOSTIC_DATA', name: 'Other Diagnostic Data', category: 'Diagnostics' },
+
+          # Other
+          { id: 'OTHER_DATA', name: 'Other Data Types', category: 'Other' }
+        ]
       end
 
-      # Create an app data usage declaration
-      def create_app_data_usage(category:, purposes:, data_protection: nil, target_app_id: nil)
-        target_app_id ||= @app_id
-
-        body = {
-          data: {
-            type: 'appDataUsages',
-            attributes: {
-              category: category
-            },
-            relationships: {
-              app: {
-                data: {
-                  type: 'apps',
-                  id: target_app_id
-                }
-              }
-            }
-          }
-        }
-
-        # Add purposes if provided
-        if purposes&.any?
-          body[:data][:relationships][:purposes] = {
-            data: purposes.map { |p| { type: 'appDataUsagePurposes', id: p } }
-          }
-        end
-
-        # Add data protection if provided
-        if data_protection
-          body[:data][:relationships][:dataProtection] = {
-            data: { type: 'appDataUsageDataProtections', id: data_protection }
-          }
-        end
-
-        post('/appDataUsages', body: body)
+      # Reference: All available privacy purposes
+      def privacy_purposes
+        [
+          { id: 'THIRD_PARTY_ADVERTISING', name: 'Third-Party Advertising',
+            description: 'Used to display third-party ads or share with ad networks' },
+          { id: 'DEVELOPERS_ADVERTISING', name: "Developer's Advertising or Marketing",
+            description: 'Used to display first-party ads or marketing communications' },
+          { id: 'ANALYTICS', name: 'Analytics',
+            description: 'Used to evaluate user behavior or measure audience size' },
+          { id: 'PRODUCT_PERSONALIZATION', name: 'Product Personalization',
+            description: 'Used to customize features, content, or recommendations' },
+          { id: 'APP_FUNCTIONALITY', name: 'App Functionality',
+            description: 'Used for features like authentication, security, or preferences' },
+          { id: 'OTHER_PURPOSES', name: 'Other Purposes',
+            description: 'Used for purposes not listed above' }
+        ]
       end
 
-      # Delete an app data usage declaration
-      def delete_app_data_usage(usage_id:)
-        delete("/appDataUsages/#{usage_id}")
-      end
-
-      private
-
-      def extract_purposes(usage)
-        purposes_data = usage.dig('relationships', 'purposes', 'data')
-        return [] unless purposes_data
-
-        purposes_data.map { |p| p['id'] }
+      # Reference: Data protection/linkage levels
+      def privacy_protection_levels
+        [
+          { id: 'DATA_USED_TO_TRACK_YOU', name: 'Used to Track You',
+            description: 'Data used for cross-app/cross-site tracking (requires ATT prompt)' },
+          { id: 'DATA_LINKED_TO_YOU', name: 'Linked to You',
+            description: 'Data associated with user identity (account, device, etc.)' },
+          { id: 'DATA_NOT_LINKED_TO_YOU', name: 'Not Linked to You',
+            description: 'Data collected but not associated with user identity' },
+          { id: 'DATA_NOT_COLLECTED', name: 'Not Collected',
+            description: 'Data is not collected by the app' }
+        ]
       end
     end
   end
