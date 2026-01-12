@@ -134,9 +134,7 @@ module AppStoreConnect
         raise ApiError, "Version not found: #{version_id}" unless version
 
         state = version.dig('attributes', 'appStoreState')
-        unless state == 'PENDING_DEVELOPER_RELEASE'
-          raise ApiError, "Version must be PENDING_DEVELOPER_RELEASE to release (current: #{state})"
-        end
+        raise ApiError, "Version must be PENDING_DEVELOPER_RELEASE to release (current: #{state})" unless state == 'PENDING_DEVELOPER_RELEASE'
 
         patch("/appStoreVersions/#{version_id}", body: {
                 data: {

@@ -3,11 +3,11 @@
 
 # Auto-load dotenv if available (common in Rails projects)
 begin
-  require "dotenv/load"
+  require 'dotenv/load'
 rescue LoadError
   # dotenv not available, skip
 end
 
-require "app_store_connect"
+require 'app_store_connect'
 
 AppStoreConnect::CLI.new(ARGV).run

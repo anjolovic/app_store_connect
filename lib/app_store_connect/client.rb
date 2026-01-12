@@ -479,7 +479,7 @@ module AppStoreConnect
     rescue ApiError => e
       # IRIS API may not be accessible with standard JWT auth
       raise ApiError, "Resolution Center API error: #{e.message}. " \
-                      "Note: Detailed rejection messages may require App Store Connect web UI access."
+                      'Note: Detailed rejection messages may require App Store Connect web UI access.'
     end
 
     # Get messages from a resolution center thread
@@ -534,11 +534,9 @@ module AppStoreConnect
       status_code = response[:status]
 
       # Provide helpful error message if session auth is needed
-      if status_code == 401 || status_code == 403
-        unless @session&.valid?
-          raise ApiError, "Resolution Center requires session authentication. " \
-                          "Run 'fastlane spaceauth -u YOUR_APPLE_ID' and set FASTLANE_SESSION environment variable."
-        end
+      if [401, 403].include?(status_code) && !@session&.valid?
+        raise ApiError, 'Resolution Center requires session authentication. ' \
+                        "Run 'fastlane spaceauth -u YOUR_APPLE_ID' and set FASTLANE_SESSION environment variable."
       end
 
       handle_error_response(result, status_code, path) if status_code >= 400
@@ -611,7 +609,7 @@ module AppStoreConnect
       payload = {
         iss: @issuer_id,
         iat: now,
-        exp: now + 20 * 60,
+        exp: now + (20 * 60),
         aud: 'appstoreconnect-v1'
       }
 

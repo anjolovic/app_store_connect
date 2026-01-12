@@ -52,7 +52,7 @@ module AppStoreConnect
     # Clear stored session
     def clear_session
       @cookies = {}
-      File.delete(SESSION_FILE) if File.exist?(SESSION_FILE)
+      FileUtils.rm_f(SESSION_FILE)
     end
 
     private
@@ -71,24 +71,22 @@ module AppStoreConnect
       # Format: "---\n- !ruby/object:HTTP::Cookie\n  name: myacinfo\n  value: ..."
       # Or simpler format: just cookie strings
 
-      begin
-        # Try to parse as YAML first
-        parsed = YAML.safe_load(session_data, permitted_classes: [Symbol])
+      # Try to parse as YAML first
+      parsed = YAML.safe_load(session_data, permitted_classes: [Symbol])
 
-        if parsed.is_a?(Array)
-          parsed.each do |cookie_str|
-            parse_cookie_string(cookie_str.to_s)
-          end
-        elsif parsed.is_a?(String)
-          parse_cookie_string(parsed)
+      if parsed.is_a?(Array)
+        parsed.each do |cookie_str|
+          parse_cookie_string(cookie_str.to_s)
         end
-      rescue Psych::DisallowedClass
-        # YAML contains Ruby objects (HTTP::Cookie) - parse manually
-        parse_fastlane_yaml_cookies(session_data)
-      rescue StandardError
-        # Try parsing as raw cookie string
-        parse_cookie_string(session_data)
+      elsif parsed.is_a?(String)
+        parse_cookie_string(parsed)
       end
+    rescue Psych::DisallowedClass
+      # YAML contains Ruby objects (HTTP::Cookie) - parse manually
+      parse_fastlane_yaml_cookies(session_data)
+    rescue StandardError
+      # Try parsing as raw cookie string
+      parse_cookie_string(session_data)
     end
 
     # Parse fastlane's YAML format with HTTP::Cookie objects
@@ -117,16 +115,16 @@ module AppStoreConnect
         part = part.strip
         next if part.empty?
 
-        if part.include?('=')
-          name, value = part.split('=', 2)
-          name = name.strip
-          value = value&.strip || ''
+        next unless part.include?('=')
 
-          # Skip cookie attributes
-          next if %w[path domain expires max-age secure httponly samesite].include?(name.downcase)
+        name, value = part.split('=', 2)
+        name = name.strip
+        value = value&.strip || ''
 
-          @cookies[name] = value
-        end
+        # Skip cookie attributes
+        next if %w[path domain expires max-age secure httponly samesite].include?(name.downcase)
+
+        @cookies[name] = value
       end
     end
   end

@@ -59,7 +59,11 @@ module AppStoreConnect
 
         # Check subscription states
         sub_issues = status[:subscriptions].select { |s| s[:state] == 'MISSING_METADATA' }
-        issues << "Subscriptions missing metadata: #{sub_issues.map { |s| s[:product_id] }.join(', ')}" if sub_issues.any?
+        if sub_issues.any?
+          issues << "Subscriptions missing metadata: #{sub_issues.map do |s|
+            s[:product_id]
+          end.join(', ')}"
+        end
 
         sub_rejected = status[:subscriptions].select { |s| s[:state] == 'REJECTED' }
         issues << "Subscriptions rejected: #{sub_rejected.map { |s| s[:product_id] }.join(', ')}" if sub_rejected.any?

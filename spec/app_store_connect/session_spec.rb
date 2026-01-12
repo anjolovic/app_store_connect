@@ -6,7 +6,7 @@ RSpec.describe AppStoreConnect::Session do
   subject(:session) { described_class.new }
 
   around do |example|
-    original_session = ENV['FASTLANE_SESSION']
+    original_session = ENV.fetch('FASTLANE_SESSION', nil)
     ENV.delete('FASTLANE_SESSION')
     example.run
     ENV['FASTLANE_SESSION'] = original_session if original_session

@@ -103,12 +103,7 @@ module AppStoreConnect
             error_code = store_context.error
 
             # If the error is CRL-related, ignore it and continue
-            if CRL_ERROR_CODES.include?(error_code)
-              true
-            else
-              # For other errors, fail the verification
-              false
-            end
+            CRL_ERROR_CODES.include?(error_code)
           }
 
           http.cert_store = store
@@ -140,9 +135,7 @@ module AppStoreConnect
         status_output = `#{curl_cmd.shelljoin}`
         exit_status = $CHILD_STATUS
 
-        unless exit_status.success?
-          raise ApiError, "HTTP request failed: curl exit code #{exit_status.exitstatus}"
-        end
+        raise ApiError, "HTTP request failed: curl exit code #{exit_status.exitstatus}" unless exit_status.success?
 
         http_status = status_output.strip.to_i
         response_body = File.read(response_file.path)
@@ -161,8 +154,8 @@ module AppStoreConnect
         'curl',
         '-s',           # Silent mode
         '-g',           # Disable URL globbing (for brackets in URLs)
-        '-o', output_file,  # Write response body to file
-        '-w', '%{http_code}', # Write HTTP status code to stdout
+        '-o', output_file, # Write response body to file
+        '-w', '%<http_code>s', # Write HTTP status code to stdout
         '-X', method.to_s.upcase
       ]
 

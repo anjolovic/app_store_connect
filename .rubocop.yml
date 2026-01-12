@@ -1,0 +1,68 @@
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.1
+  SuggestExtensions: false
+  Exclude:
+    - 'vendor/**/*'
+    - 'bin/**/*'
+    - 'tmp/**/*'
+
+# API wrappers and CLI commands naturally have longer/complex methods
+Metrics/MethodLength:
+  Max: 50
+  Exclude:
+    - 'lib/app_store_connect/cli.rb'
+    - 'lib/app_store_connect/cli/**/*.rb'
+    - 'spec/**/*.rb'
+
+Metrics/AbcSize:
+  Max: 70
+  Exclude:
+    - 'lib/app_store_connect/cli.rb'
+    - 'lib/app_store_connect/cli/**/*.rb'
+
+Metrics/CyclomaticComplexity:
+  Max: 20
+  Exclude:
+    - 'lib/app_store_connect/cli.rb'
+    - 'lib/app_store_connect/cli/**/*.rb'
+
+Metrics/PerceivedComplexity:
+  Max: 25
+  Exclude:
+    - 'lib/app_store_connect/cli.rb'
+    - 'lib/app_store_connect/cli/**/*.rb'
+
+Metrics/BlockLength:
+  Exclude:
+    - 'lib/app_store_connect/cli.rb'
+    - 'lib/app_store_connect/cli/**/*.rb'
+    - 'spec/**/*.rb'
+    - '*.gemspec'
+
+Metrics/ParameterLists:
+  Max: 10
+
+# Gemspec dependencies style
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+# Allow longer lines for URLs and API paths
+Layout/LineLength:
+  Max: 150
+
+# Skip documentation for internal classes
+Style/Documentation:
+  Enabled: false
+
+# Allow larger classes/modules for API wrappers
+Metrics/ClassLength:
+  Max: 3000
+  Exclude:
+    - 'lib/app_store_connect/cli.rb'
+
+Metrics/ModuleLength:
+  Max: 300
+  Exclude:
+    - 'lib/app_store_connect/cli/**/*.rb'
+    - 'spec/**/*.rb'
