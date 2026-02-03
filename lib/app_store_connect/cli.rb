@@ -47,7 +47,7 @@ module AppStoreConnect
       status review rejection session subs subscriptions builds apps ready help
       review-info update-review-notes update-review-contact update-demo-account
       cancel-review submit create-review-detail content-rights set-content-rights
-      sub-details update-sub-description update-sub-note delete-sub
+      sub-details create-sub create-subscription update-sub-description update-sub-note delete-sub
       version-info update-whats-new description update-description
       keywords update-keywords urls update-marketing-url update-support-url
       update-promotional-text update-privacy-url

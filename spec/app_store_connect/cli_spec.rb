@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'stringio'
 
 RSpec.describe AppStoreConnect::CLI do
   # Create a test private key for the client
@@ -180,6 +181,175 @@ RSpec.describe AppStoreConnect::CLI do
       end
     end
 
+    context 'with create-sub command' do
+      it 'errors when missing required args' do
+        cli = described_class.new(['create-sub'])
+
+        expect { cli.run }.to output(/Usage: asc create-sub/).to_stdout.and raise_error(SystemExit)
+      end
+
+      it 'errors when subscription already exists' do
+        stub_api_get(
+          '/apps/123456789/subscriptionGroups',
+          response_body: {
+            data: [
+              { id: 'group1', type: 'subscriptionGroups', attributes: { referenceName: 'Main Plans' } }
+            ]
+          }
+        )
+        stub_api_get(
+          '/subscriptionGroups/group1/subscriptions',
+          response_body: {
+            data: [
+              {
+                id: 'sub1',
+                type: 'subscriptions',
+                attributes: {
+                  productId: 'com.example.app.plan.monthly',
+                  name: 'Monthly Plan',
+                  state: 'READY_TO_SUBMIT'
+                }
+              }
+            ]
+          }
+        )
+        stub_api_get('/apps/123456789/inAppPurchasesV2', response_body: { data: [] })
+
+        cli = described_class.new([
+                                   'create-sub',
+                                   'com.example.app.plan.monthly',
+                                   'Monthly Plan',
+                                   '1m',
+                                   '--group-id',
+                                   'group1'
+                                 ])
+
+        expect { cli.run }.to output(/Subscription already exists/).to_stdout.and raise_error(SystemExit)
+      end
+
+      it 'errors when product id is already used by an IAP' do
+        stub_api_get('/apps/123456789/subscriptionGroups', response_body: { data: [] })
+        stub_api_get(
+          '/apps/123456789/inAppPurchasesV2',
+          response_body: {
+            data: [
+              {
+                id: 'iap1',
+                type: 'inAppPurchases',
+                attributes: {
+                  productId: 'com.example.app.plan.monthly',
+                  name: 'Monthly Coins',
+                  state: 'READY_TO_SUBMIT',
+                  inAppPurchaseType: 'CONSUMABLE'
+                }
+              }
+            ]
+          }
+        )
+
+        cli = described_class.new([
+                                   'create-sub',
+                                   'com.example.app.plan.monthly',
+                                   'Monthly Plan',
+                                   '1m',
+                                   '--group',
+                                   'Main Plans',
+                                   '--create-group'
+                                 ])
+
+        expect { cli.run }.to output(/Product ID already used by an in-app purchase/).to_stdout.and raise_error(SystemExit)
+      end
+
+      it 'errors when multiple groups exist but none specified' do
+        stub_api_get(
+          '/apps/123456789/subscriptionGroups',
+          response_body: {
+            data: [
+              { id: 'group1', type: 'subscriptionGroups', attributes: { referenceName: 'Main Plans' } },
+              { id: 'group2', type: 'subscriptionGroups', attributes: { referenceName: 'Legacy Plans' } }
+            ]
+          }
+        )
+        stub_api_get('/subscriptionGroups/group1/subscriptions', response_body: { data: [] })
+        stub_api_get('/subscriptionGroups/group2/subscriptions', response_body: { data: [] })
+        stub_api_get('/apps/123456789/inAppPurchasesV2', response_body: { data: [] })
+
+        cli = described_class.new(['create-sub', 'com.example.app.plan.monthly', 'Monthly Plan', '1m'])
+
+        expect { cli.run }.to output(/Multiple subscription groups found/).to_stdout.and raise_error(SystemExit)
+      end
+
+      it 'creates a subscription with new group and localization' do
+        stub_api_get('/apps/123456789/subscriptionGroups', response_body: { data: [] })
+        stub_api_get('/apps/123456789/inAppPurchasesV2', response_body: { data: [] })
+
+        stub_api_post(
+          '/subscriptionGroups',
+          response_body: {
+            data: {
+              id: 'group_new',
+              type: 'subscriptionGroups',
+              attributes: { referenceName: 'Main Plans' }
+            }
+          }
+        )
+
+        stub_api_post(
+          '/subscriptions',
+          response_body: {
+            data: {
+              id: 'sub_new',
+              type: 'subscriptions',
+              attributes: {
+                name: 'Monthly Plan',
+                productId: 'com.example.app.plan.monthly',
+                state: 'READY_TO_SUBMIT',
+                groupLevel: 1,
+                subscriptionPeriod: 'ONE_MONTH'
+              }
+            }
+          }
+        )
+
+        stub_api_post(
+          '/subscriptionLocalizations',
+          response_body: {
+            data: {
+              id: 'loc1',
+              type: 'subscriptionLocalizations',
+              attributes: {
+                locale: 'en-US',
+                name: 'Monthly Plan',
+                description: 'Access premium features'
+              }
+            }
+          }
+        )
+
+        cli = described_class.new([
+                                   'create-sub',
+                                   'com.example.app.plan.monthly',
+                                   'Monthly Plan',
+                                   '1m',
+                                   '--group',
+                                   'Main Plans',
+                                   '--create-group',
+                                   '--group-level',
+                                   '1',
+                                   '--locale',
+                                   'en-US',
+                                   '--display-name',
+                                   'Monthly Plan',
+                                   '--description',
+                                   'Access premium features'
+                                 ])
+
+        with_stdin("y\n") do
+          expect { cli.run }.to output(/Subscription created!/).to_stdout
+        end
+      end
+    end
+
     context 'when configuration is missing' do
       before do
         AppStoreConnect.reset_configuration!
@@ -230,11 +400,19 @@ RSpec.describe AppStoreConnect::CLI do
 
   describe 'COMMANDS constant' do
     it 'includes all expected commands' do
-      expected_commands = %w[status review builds apps help testers users territories categories]
+      expected_commands = %w[status review builds apps help testers users territories categories create-sub]
 
       expected_commands.each do |cmd|
         expect(described_class::COMMANDS).to include(cmd)
       end
     end
+  end
+
+  def with_stdin(input)
+    original_stdin = $stdin
+    $stdin = StringIO.new(input)
+    yield
+  ensure
+    $stdin = original_stdin
   end
 end

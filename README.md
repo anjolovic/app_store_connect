@@ -116,6 +116,9 @@ asc subs
 # View detailed subscription info with localizations
 asc sub-details
 
+# Create a subscription product
+asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m --group "Main Plans" --create-group
+
 # View in-app purchases
 asc iaps
 
@@ -454,6 +457,8 @@ client.create_customer_review_response(
 | `update_subscription` | Update subscription metadata |
 | `update_subscription_localization` | Update subscription description |
 | `create_subscription_localization` | Create new subscription localization |
+| `create_subscription` | Create a subscription product |
+| `create_subscription_group` | Create a subscription group |
 | `update_app_store_version_localization` | Update version metadata |
 | `update_app_store_review_detail` | Update reviewer notes |
 | `update_beta_app_review_detail` | Update TestFlight notes |

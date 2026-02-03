@@ -49,6 +49,7 @@ module AppStoreConnect
             create-review-detail                  Create review detail for version
             content-rights                        Show content rights declaration status
             set-content-rights <yes|no>           Declare third-party content usage
+            create-sub <product_id> "name" <period>  Create subscription product
             update-sub-description <id> "desc"    Update subscription description
             update-sub-note <id> "note"           Update subscription review note
             delete-sub <product_id>               Delete a draft subscription
@@ -172,6 +173,7 @@ module AppStoreConnect
             asc update-review-notes "Please test with demo account"
             asc update-whats-new "Bug fixes and performance improvements"
             asc sub-details               # View subscription localizations
+            asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m --group "Main Plans" --create-group
             asc iap-details               # View IAP localizations
             asc customer-reviews          # View recent customer reviews
 

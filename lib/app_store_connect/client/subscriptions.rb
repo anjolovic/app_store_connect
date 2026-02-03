@@ -10,6 +10,30 @@ module AppStoreConnect
         get("/apps/#{target_app_id}/subscriptionGroups")['data']
       end
 
+      # Create a subscription group
+      def create_subscription_group(reference_name:, target_app_id: nil)
+        target_app_id ||= @app_id
+        body = {
+          data: {
+            type: 'subscriptionGroups',
+            attributes: {
+              referenceName: reference_name
+            },
+            relationships: {
+              app: {
+                data: { type: 'apps', id: target_app_id }
+              }
+            }
+          }
+        }
+
+        result = post('/subscriptionGroups', body: body)['data']
+        {
+          id: result['id'],
+          reference_name: result.dig('attributes', 'referenceName')
+        }
+      end
+
       # Get all subscriptions
       def subscriptions(target_app_id: nil)
         target_app_id ||= @app_id
@@ -18,6 +42,41 @@ module AppStoreConnect
           group_id = group['id']
           get("/subscriptionGroups/#{group_id}/subscriptions")['data']
         end
+      end
+
+      # Create a subscription
+      def create_subscription(subscription_group_id:, name:, product_id:, subscription_period:,
+                              family_sharable: nil, review_note: nil, group_level: nil)
+        attributes = {
+          name: name,
+          productId: product_id,
+          subscriptionPeriod: subscription_period
+        }
+        attributes[:familySharable] = family_sharable unless family_sharable.nil?
+        attributes[:reviewNote] = review_note if review_note
+        attributes[:groupLevel] = group_level if group_level
+
+        body = {
+          data: {
+            type: 'subscriptions',
+            attributes: attributes,
+            relationships: {
+              group: {
+                data: { type: 'subscriptionGroups', id: subscription_group_id }
+              }
+            }
+          }
+        }
+
+        result = post('/subscriptions', body: body)['data']
+        {
+          id: result['id'],
+          name: result.dig('attributes', 'name'),
+          product_id: result.dig('attributes', 'productId'),
+          state: result.dig('attributes', 'state'),
+          group_level: result.dig('attributes', 'groupLevel'),
+          subscription_period: result.dig('attributes', 'subscriptionPeriod')
+        }
       end
 
       # Get subscription localizations

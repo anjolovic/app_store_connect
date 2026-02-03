@@ -214,6 +214,71 @@ RSpec.describe AppStoreConnect::Client do
     end
   end
 
+  describe '#create_subscription_group' do
+    let(:subscription_group_response) do
+      {
+        data: {
+          id: 'sub_group_1',
+          type: 'subscriptionGroups',
+          attributes: {
+            referenceName: 'Main Plans'
+          }
+        }
+      }
+    end
+
+    before do
+      stub_api_post('/subscriptionGroups', response_body: subscription_group_response)
+    end
+
+    it 'creates a subscription group' do
+      result = client.create_subscription_group(reference_name: 'Main Plans')
+
+      expect(result[:id]).to eq('sub_group_1')
+      expect(result[:reference_name]).to eq('Main Plans')
+    end
+  end
+
+  describe '#create_subscription' do
+    let(:subscription_response) do
+      {
+        data: {
+          id: 'sub_1',
+          type: 'subscriptions',
+          attributes: {
+            name: 'Monthly Plan',
+            productId: 'com.example.app.plan.monthly',
+            state: 'READY_TO_SUBMIT',
+            groupLevel: 1,
+            subscriptionPeriod: 'ONE_MONTH'
+          }
+        }
+      }
+    end
+
+    before do
+      stub_api_post('/subscriptions', response_body: subscription_response)
+    end
+
+    it 'creates a subscription product' do
+      result = client.create_subscription(
+        subscription_group_id: 'sub_group_1',
+        name: 'Monthly Plan',
+        product_id: 'com.example.app.plan.monthly',
+        subscription_period: 'ONE_MONTH',
+        family_sharable: true,
+        review_note: 'Review note',
+        group_level: 1
+      )
+
+      expect(result[:id]).to eq('sub_1')
+      expect(result[:product_id]).to eq('com.example.app.plan.monthly')
+      expect(result[:name]).to eq('Monthly Plan')
+      expect(result[:subscription_period]).to eq('ONE_MONTH')
+      expect(result[:group_level]).to eq(1)
+    end
+  end
+
   describe '#create_beta_group' do
     let(:new_group_response) do
       {
