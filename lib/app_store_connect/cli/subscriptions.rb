@@ -2,7 +2,9 @@
 
 require 'date'
 require 'bigdecimal'
+require 'fileutils'
 require 'json'
+require 'open3'
 require 'yaml'
 
 module AppStoreConnect
@@ -961,12 +963,12 @@ module AppStoreConnect
         next_cursor = nil
         max_limit = 2000
 
-        if all || search_price
-          if cursor
-            puts "\e[33mWarning: --after is not supported for subscription price points; ignoring.\e[0m"
-            cursor = nil
-          end
+        if cursor
+          puts "\e[33mWarning: --after is not supported for subscription price points; ignoring.\e[0m"
+          cursor = nil
+        end
 
+        if all || search_price
           limit = [limit, max_limit].min
           limit = max_limit if limit < max_limit
 
@@ -1205,13 +1207,81 @@ module AppStoreConnect
       end
 
       def cmd_upload_sub_review_screenshot
-        if @options.length < 2
-          puts "\e[31mUsage: asc upload-sub-review-screenshot <product_id> <file_path>\e[0m"
+        if @options.empty?
+          puts "\e[31mUsage: asc upload-sub-review-screenshot <product_id> [file_path] [--capture] [--output PATH] [--simulator-id ID|--simulator-name NAME]\e[0m"
+          puts 'Example: asc upload-sub-review-screenshot com.example.app.plan.monthly ./paywall.png'
+          puts 'Example: asc upload-sub-review-screenshot com.example.app.plan.monthly --capture --output ./subscription-review.png'
           exit 1
         end
 
-        product_id = @options[0]
-        file_path = @options[1]
+        args = @options.dup
+        product_id = args.shift
+        file_path = nil
+        capture = false
+        output_path = nil
+        simulator_id = nil
+        simulator_name = nil
+
+        while args.any?
+          arg = args.shift
+          case arg
+          when '--capture'
+            capture = true
+          when '--output'
+            output_path = args.shift
+          when '--simulator-id'
+            simulator_id = args.shift
+          when '--simulator-name'
+            simulator_name = args.shift
+          else
+            if file_path.nil?
+              file_path = arg
+            else
+              puts "\e[31mUnknown argument: #{arg}\e[0m"
+              exit 1
+            end
+          end
+        end
+
+        if output_path && !capture
+          puts "\e[31m--output requires --capture.\e[0m"
+          exit 1
+        end
+
+        if (simulator_id || simulator_name) && !capture
+          puts "\e[31m--simulator-id/--simulator-name require --capture.\e[0m"
+          exit 1
+        end
+
+        if simulator_id && simulator_name
+          puts "\e[31mPlease provide only one of --simulator-id or --simulator-name.\e[0m"
+          exit 1
+        end
+
+        if capture
+          file_path = output_path || file_path || 'subscription-review.png'
+          begin
+            capture_simulator_screenshot(
+              file_path,
+              simulator_id: simulator_id,
+              simulator_name: simulator_name
+            )
+          rescue StandardError => e
+            puts "\e[31mScreenshot capture failed: #{e.message}\e[0m"
+            exit 1
+          end
+        end
+
+        if file_path.nil? || file_path.strip.empty?
+          puts "\e[31mMissing file path. Provide a file path or use --capture.\e[0m"
+          exit 1
+        end
+
+        unless File.exist?(file_path)
+          puts "\e[31mFile not found: #{file_path}\e[0m"
+          exit 1
+        end
+
         sub = find_subscription_by_product_id!(product_id)
 
         existing = client.subscription_review_screenshot(subscription_id: sub['id'])
@@ -1894,6 +1964,31 @@ module AppStoreConnect
         BigDecimal(raw).round(2).to_s('F')
       rescue ArgumentError
         nil
+      end
+
+      def capture_simulator_screenshot(file_path, simulator_id: nil, simulator_name: nil)
+        unless RUBY_PLATFORM.include?('darwin')
+          raise 'Simulator capture is only supported on macOS.'
+        end
+
+        dir = File.dirname(file_path)
+        FileUtils.mkdir_p(dir) unless dir == '.'
+
+        target = simulator_id || simulator_name || 'booted'
+        cmd = ['xcrun', 'simctl', 'io', target, 'screenshot', file_path]
+        output, status = Open3.capture2e(*cmd)
+
+        unless status.success?
+          raise output.strip.empty? ? 'simctl failed to capture screenshot.' : output.strip
+        end
+
+        unless File.exist?(file_path)
+          raise "Screenshot capture failed; file not found at #{file_path}."
+        end
+
+        file_path
+      rescue Errno::ENOENT
+        raise 'xcrun not found. Install Xcode command line tools.'
       end
     end
   end

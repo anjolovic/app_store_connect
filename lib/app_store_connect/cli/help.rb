@@ -64,7 +64,7 @@ module AppStoreConnect
             add-sub-price <id> <price_point_id>   Add subscription price schedule
             upload-sub-image <id> <file>          Upload subscription image (1024x1024)
             delete-sub-image <id>                 Delete subscription image
-            upload-sub-review-screenshot <id> <file> Upload subscription review screenshot
+            upload-sub-review-screenshot <id> <file> Upload subscription review screenshot (supports --capture)
             delete-sub-review-screenshot <id>     Delete subscription review screenshot
             set-sub-tax-category <id> <tax_id>    Update subscription tax category
             tax-categories [limit]               List available tax categories
@@ -86,7 +86,7 @@ module AppStoreConnect
             delete-screenshot <id>                Delete app screenshot
             upload-sub-image <id> <file>          Upload subscription image
             delete-sub-image <id>                 Delete subscription image
-            upload-sub-review-screenshot <id> <file> Upload subscription review screenshot
+            upload-sub-review-screenshot <id> <file> Upload subscription review screenshot (supports --capture)
             delete-sub-review-screenshot <id>     Delete subscription review screenshot
 
           \e[1mRELEASE AUTOMATION:\e[0m
@@ -231,6 +231,7 @@ module AppStoreConnect
             # Subscription assets:
             asc upload-sub-image com.example.app.plan.starter.monthly ~/Desktop/subscription.png
             asc upload-sub-review-screenshot com.example.app.plan.starter.monthly ~/Desktop/review.png
+            asc upload-sub-review-screenshot com.example.app.plan.starter.monthly --capture --output ./subscription-review.png
             asc tax-categories
 
             # Create subscription with price + intro offer:

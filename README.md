@@ -194,6 +194,7 @@ asc delete-sub-image com.example.app.plan.monthly
 # Review screenshot
 asc sub-review-screenshot com.example.app.plan.monthly
 asc upload-sub-review-screenshot com.example.app.plan.monthly ./review.png
+asc upload-sub-review-screenshot com.example.app.plan.monthly --capture --output ./subscription-review.png
 asc delete-sub-review-screenshot com.example.app.plan.monthly
 
 # Localizations
@@ -207,6 +208,7 @@ asc delete-sub-intro-offer OFFER_ID
 # Tax category
 asc set-sub-tax-category com.example.app.plan.monthly TAX_CATEGORY_ID
 asc tax-categories
+Note: if `tax-categories` returns Not found, set `APP_STORE_CONNECT_APP_ID` to enable the app-scoped fallback.
 ```
 
 ### Responding to Apple Review Requests
