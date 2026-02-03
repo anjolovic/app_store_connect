@@ -52,6 +52,7 @@ module AppStoreConnect
             create-sub <product_id> "name" <period>  Create subscription product
             update-sub-description <id> "desc"    Update subscription description
             update-sub-note <id> "note"           Update subscription review note
+            fix-sub-metadata <id> [options]       Add missing subscription metadata
             delete-sub <product_id>               Delete a draft subscription
             update-iap-note <id> "note"           Update IAP review notes
             update-iap-description <id> "desc"    Update IAP description
@@ -197,6 +198,9 @@ module AppStoreConnect
 
             # If Apple requests subscription description update:
             asc update-sub-description com.example.app.plan.starter.monthly "Access to basic features"
+
+            # Fix subscription metadata (localization + price):
+            asc fix-sub-metadata com.example.app.plan.starter.monthly --display-name "Starter Monthly" --description "Access basic features" --price-point PRICE_POINT_ID
 
             # Create subscription with price + intro offer:
             asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m --group "Main Plans" --create-group --price-point PRICE_POINT_ID --intro-offer FREE_TRIAL --intro-duration 1w --intro-price-point INTRO_PRICE_POINT_ID

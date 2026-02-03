@@ -468,6 +468,297 @@ module AppStoreConnect
         end
       end
 
+      def cmd_fix_sub_metadata
+        if @options.empty?
+          print_fix_sub_metadata_usage
+          exit 1
+        end
+
+        args = @options.dup
+        product_id = args.shift
+        locale = nil
+        display_name = nil
+        description = nil
+        dry_run = false
+        json_output = false
+        no_confirm = false
+        localizations_file = nil
+        add_localizations = []
+        price_point_id = nil
+        price_territory = nil
+        price_start_date = nil
+        intro_offer_mode = nil
+        intro_price_point_id = nil
+        intro_duration_input = nil
+        unknown = []
+
+        while args.any?
+          arg = args.shift
+          case arg
+          when '--locale'
+            locale = args.shift
+          when '--display-name'
+            display_name = args.shift
+          when '--description'
+            description = args.shift
+          when '--yes', '--no-confirm'
+            no_confirm = true
+          when '--dry-run'
+            dry_run = true
+          when '--json'
+            json_output = true
+          when '--localizations-file'
+            localizations_file = args.shift
+          when '--add-localization'
+            add_localizations << args.shift
+          when '--price-point'
+            price_point_id = args.shift
+          when '--price-territory'
+            price_territory = args.shift
+          when '--price-start-date'
+            price_start_date = args.shift
+          when '--intro-offer'
+            intro_offer_mode = args.shift
+          when '--intro-price-point'
+            intro_price_point_id = args.shift
+          when '--intro-duration'
+            intro_duration_input = args.shift
+          else
+            unknown << arg
+          end
+        end
+
+        if unknown.any?
+          puts "\e[31mUnknown arguments: #{unknown.join(' ')}\e[0m"
+          print_fix_sub_metadata_usage
+          exit 1
+        end
+
+        if product_id.nil? || product_id.empty?
+          print_fix_sub_metadata_usage
+          exit 1
+        end
+
+        if json_output && !no_confirm && !dry_run
+          puts "\e[31m--json requires --yes or --no-confirm to avoid interactive prompts.\e[0m"
+          exit 1
+        end
+
+        if product_id.match?(/\s/)
+          puts "\e[31mProduct ID cannot contain spaces: #{product_id}\e[0m"
+          exit 1
+        end
+
+        if price_territory && price_point_id.nil?
+          puts "\e[31m--price-territory requires --price-point.\e[0m"
+          exit 1
+        end
+
+        if price_start_date
+          begin
+            price_start_date = Date.iso8601(price_start_date).strftime('%Y-%m-%d')
+          rescue ArgumentError
+            puts "\e[31mInvalid --price-start-date. Use YYYY-MM-DD.\e[0m"
+            exit 1
+          end
+        end
+
+        if intro_offer_mode
+          intro_offer_mode = intro_offer_mode.strip.upcase.tr(' -', '_')
+          unless INTRO_OFFER_MODES.include?(intro_offer_mode)
+            puts "\e[31mInvalid --intro-offer. Use: #{INTRO_OFFER_MODES.join(', ')}\e[0m"
+            exit 1
+          end
+          if intro_price_point_id.nil? || intro_duration_input.nil?
+            puts "\e[31m--intro-offer requires --intro-price-point and --intro-duration.\e[0m"
+            exit 1
+          end
+        elsif intro_price_point_id || intro_duration_input
+          puts "\e[31m--intro-price-point/--intro-duration require --intro-offer.\e[0m"
+          exit 1
+        end
+
+        intro_duration = nil
+        if intro_duration_input
+          intro_duration = normalize_subscription_period(intro_duration_input)
+          unless intro_duration
+            puts "\e[31mInvalid --intro-duration: #{intro_duration_input}\e[0m"
+            puts "Valid durations: #{SUBSCRIPTION_PERIODS.join(', ')}"
+            exit 1
+          end
+        end
+
+        subs = client.subscriptions
+        sub = subs.find { |s| s.dig('attributes', 'productId') == product_id }
+        unless sub
+          puts "\e[31mSubscription not found: #{product_id}\e[0m"
+          puts
+          puts 'Available subscriptions:'
+          subs.each do |s|
+            puts "  - #{s.dig('attributes', 'productId')}"
+          end
+          exit 1
+        end
+
+        sub_id = sub['id']
+        default_name = sub.dig('attributes', 'name')
+
+        localizations = []
+        if display_name || description
+          localizations << {
+            locale: locale || 'en-US',
+            name: display_name || default_name,
+            description: description
+          }
+        elsif locale
+          puts "\e[33mLocale provided without --display-name/--description; skipping localization.\e[0m"
+        end
+
+        if add_localizations.any?
+          add_localizations.each do |value|
+            localizations << parse_localization_arg(value)
+          end
+        end
+
+        if localizations_file
+          localizations.concat(load_localizations_file(localizations_file))
+        end
+
+        normalize_localizations!(localizations) if localizations.any?
+
+        existing_localizations = client.subscription_localizations(subscription_id: sub_id)
+        existing_locales = existing_localizations.map { |loc| loc[:locale].to_s.downcase }
+        pending_localizations = localizations.reject do |loc|
+          existing_locales.include?(loc[:locale].to_s.downcase)
+        end
+
+        puts "\e[1mFix Subscription Metadata\e[0m"
+        puts '=' * 50
+        puts "  Product ID: #{product_id}"
+        puts "  Subscription ID: #{sub_id}"
+        pending_localizations.each do |loc|
+          puts "  Add Localization: #{loc[:locale]} (#{loc[:name]})"
+        end
+        (localizations - pending_localizations).each do |loc|
+          puts "  Skip Localization: #{loc[:locale]} (already exists)"
+        end
+        puts "  Price Point: #{price_point_id}" if price_point_id
+        puts "  Price Territory: #{price_territory}" if price_territory
+        puts "  Price Start Date: #{price_start_date}" if price_start_date
+        if intro_offer_mode
+          puts "  Intro Offer: #{intro_offer_mode}"
+          puts "  Intro Duration: #{intro_duration}"
+          puts "  Intro Price Point: #{intro_price_point_id}"
+        end
+
+        if dry_run
+          output_metadata_dry_run(
+            json_output: json_output,
+            product_id: product_id,
+            subscription_id: sub_id,
+            localizations: pending_localizations,
+            skipped_localizations: localizations - pending_localizations,
+            price_point_id: price_point_id,
+            price_territory: price_territory,
+            price_start_date: price_start_date,
+            intro_offer_mode: intro_offer_mode,
+            intro_duration: intro_duration,
+            intro_price_point_id: intro_price_point_id
+          )
+          return
+        end
+
+        unless no_confirm
+          print "\e[33mProceed? (y/N): \e[0m"
+          confirm = $stdin.gets&.strip&.downcase
+          return unless confirm == 'y'
+        end
+
+        localization_results = []
+        pending_localizations.each do |loc|
+          result = client.create_subscription_localization(
+            subscription_id: sub_id,
+            locale: loc[:locale],
+            name: loc[:name],
+            description: loc[:description]
+          )
+          localization_results << {
+            locale: loc[:locale],
+            name: loc[:name],
+            id: result.dig('data', 'id')
+          }
+        rescue ApiError => e
+          puts "\e[33mWarning: Localization #{loc[:locale]} failed: #{e.message}\e[0m"
+        end
+
+        price_result = nil
+        if price_point_id
+          if price_territory
+            begin
+              price_points = client.subscription_price_points(subscription_id: sub_id, territory: price_territory)
+              price_point_ids = price_points.map { |p| p['id'] }
+              unless price_point_ids.include?(price_point_id)
+                puts "\e[33mWarning: Price point #{price_point_id} not found for territory #{price_territory}; skipping price creation.\e[0m"
+                price_point_id = nil
+              end
+            rescue ApiError => e
+              puts "\e[33mWarning: Could not validate price point: #{e.message}\e[0m"
+            end
+          end
+
+          if price_point_id
+            begin
+              price_result = client.create_subscription_price(
+                subscription_id: sub_id,
+                subscription_price_point_id: price_point_id,
+                start_date: price_start_date
+              )
+            rescue ApiError => e
+              puts "\e[33mWarning: Price creation failed: #{e.message}\e[0m"
+            end
+          end
+        end
+
+        intro_result = nil
+        if intro_offer_mode
+          begin
+            intro_result = client.create_subscription_introductory_offer(
+              subscription_id: sub_id,
+              offer_mode: intro_offer_mode,
+              duration: intro_duration,
+              subscription_price_point_id: intro_price_point_id
+            )
+          rescue ApiError => e
+            puts "\e[33mWarning: Intro offer failed: #{e.message}\e[0m"
+          end
+        end
+
+        if json_output
+          puts JSON.pretty_generate(
+            subscription: {
+              id: sub_id,
+              product_id: product_id
+            },
+            localizations: localization_results,
+            price: price_result,
+            introductory_offer: intro_result
+          )
+        else
+          puts "\e[32mMetadata updated!\e[0m"
+          localization_results.each do |loc|
+            puts "  Localization: #{loc[:locale]} (#{loc[:name]})"
+          end
+          if price_result
+            puts "  Price: #{price_result[:price_point_id]} (start #{price_result[:start_date] || 'immediate'})"
+          end
+          if intro_result
+            puts "  Intro Offer: #{intro_result[:offer_mode]} #{intro_result[:duration]}"
+          end
+        end
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
       def cmd_subscriptions
         puts "\e[1mSubscription Products\e[0m"
         puts '=' * 50
@@ -681,6 +972,27 @@ module AppStoreConnect
         puts '  --json                      JSON output (requires --yes)'
       end
 
+      def print_fix_sub_metadata_usage
+        puts "\e[31mUsage: asc fix-sub-metadata <product_id> [options]\e[0m"
+        puts 'Example: asc fix-sub-metadata com.example.app.plan.monthly --display-name "Monthly Plan" --description "Access premium features" --price-point PRICE_POINT_ID'
+        puts
+        puts 'Options:'
+        puts '  --locale <locale>           Localization locale (default: en-US)'
+        puts '  --display-name "text"       Localized display name'
+        puts '  --description "text"        Localized description'
+        puts '  --localizations-file <path> JSON or YAML list of localizations'
+        puts '  --add-localization <loc:name:desc> Add a localization (repeatable)'
+        puts '  --price-point <id>          Subscription price point id'
+        puts '  --price-territory <ISO>     Validate price point for territory (e.g., USA)'
+        puts '  --price-start-date <date>   Price start date (YYYY-MM-DD)'
+        puts '  --intro-offer <type>        FREE_TRIAL, PAY_AS_YOU_GO, PAY_UP_FRONT'
+        puts '  --intro-duration <period>   Intro duration (same as subscription periods)'
+        puts '  --intro-price-point <id>    Price point for intro offer'
+        puts '  --dry-run                   Validate without creating'
+        puts '  --yes, --no-confirm         Skip confirmation prompt'
+        puts '  --json                      JSON output (requires --yes)'
+      end
+
       def normalize_subscription_period(value)
         return nil if value.nil?
 
@@ -817,6 +1129,34 @@ module AppStoreConnect
               create_group: create_group
             },
             localizations: localizations,
+            price: {
+              price_point_id: price_point_id,
+              territory: price_territory,
+              start_date: price_start_date
+            },
+            introductory_offer: {
+              offer_mode: intro_offer_mode,
+              duration: intro_duration,
+              price_point_id: intro_price_point_id
+            }
+          )
+        else
+          puts "\e[33mDry run: no changes made.\e[0m"
+        end
+      end
+
+      def output_metadata_dry_run(json_output:, product_id:, subscription_id:, localizations:, skipped_localizations:,
+                                  price_point_id:, price_territory:, price_start_date:,
+                                  intro_offer_mode:, intro_duration:, intro_price_point_id:)
+        if json_output
+          puts JSON.pretty_generate(
+            dry_run: true,
+            subscription: {
+              id: subscription_id,
+              product_id: product_id
+            },
+            localizations: localizations,
+            skipped_localizations: skipped_localizations,
             price: {
               price_point_id: price_point_id,
               territory: price_territory,

@@ -451,6 +451,96 @@ RSpec.describe AppStoreConnect::CLI do
       end
     end
 
+    context 'with fix-sub-metadata command' do
+      it 'errors when missing product id' do
+        cli = described_class.new(['fix-sub-metadata'])
+
+        expect { cli.run }.to output(/Usage: asc fix-sub-metadata/).to_stdout.and raise_error(SystemExit)
+      end
+
+      it 'updates localization and price for an existing subscription' do
+        stub_api_get(
+          '/apps/123456789/subscriptionGroups',
+          response_body: {
+            data: [
+              { id: 'group1', type: 'subscriptionGroups', attributes: { referenceName: 'Plans' } }
+            ]
+          }
+        )
+        stub_api_get(
+          '/subscriptionGroups/group1/subscriptions',
+          response_body: {
+            data: [
+              {
+                id: 'sub1',
+                type: 'subscriptions',
+                attributes: {
+                  productId: 'com.example.app.plan.monthly',
+                  name: 'Monthly Plan',
+                  state: 'MISSING_METADATA'
+                }
+              }
+            ]
+          }
+        )
+        stub_api_get(
+          '/subscriptions/sub1/subscriptionLocalizations',
+          response_body: { data: [] }
+        )
+        stub_api_post(
+          '/subscriptionLocalizations',
+          response_body: {
+            data: {
+              id: 'loc1',
+              type: 'subscriptionLocalizations',
+              attributes: {
+                locale: 'en-US',
+                name: 'Monthly Plan',
+                description: 'Access premium features'
+              }
+            }
+          }
+        )
+        stub_api_get(
+          '/subscriptions/sub1/pricePoints?filter[territory]=USA&include=territory',
+          response_body: { data: [{ id: 'price_point_1', type: 'subscriptionPricePoints' }] }
+        )
+        stub_api_post(
+          '/subscriptionPrices',
+          response_body: {
+            data: {
+              id: 'price_1',
+              type: 'subscriptionPrices',
+              attributes: { startDate: '2026-03-01' },
+              relationships: {
+                subscriptionPricePoint: {
+                  data: { id: 'price_point_1', type: 'subscriptionPricePoints' }
+                }
+              }
+            }
+          }
+        )
+
+        cli = described_class.new([
+                                   'fix-sub-metadata',
+                                   'com.example.app.plan.monthly',
+                                   '--display-name',
+                                   'Monthly Plan',
+                                   '--description',
+                                   'Access premium features',
+                                   '--price-point',
+                                   'price_point_1',
+                                   '--price-territory',
+                                   'USA',
+                                   '--price-start-date',
+                                   '2026-03-01',
+                                   '--yes'
+                                 ])
+
+        expect { cli.run }.to output(/Metadata updated!/).to_stdout
+      end
+    end
+
     context 'when configuration is missing' do
       before do
         AppStoreConnect.reset_configuration!
@@ -501,7 +591,7 @@ RSpec.describe AppStoreConnect::CLI do
 
   describe 'COMMANDS constant' do
     it 'includes all expected commands' do
-      expected_commands = %w[status review builds apps help testers users territories categories create-sub]
+      expected_commands = %w[status review builds apps help testers users territories categories create-sub fix-sub-metadata]
 
       expected_commands.each do |cmd|
         expect(described_class::COMMANDS).to include(cmd)

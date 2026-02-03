@@ -125,6 +125,12 @@ asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m \
   --price-point PRICE_POINT_ID --price-start-date 2026-03-01 \
   --intro-offer FREE_TRIAL --intro-duration 1w --intro-price-point INTRO_PRICE_POINT_ID
 
+# Fix missing metadata on an existing subscription
+asc fix-sub-metadata com.example.app.plan.monthly \
+  --display-name "Monthly Plan" \
+  --description "Access premium features" \
+  --price-point PRICE_POINT_ID
+
 # View in-app purchases
 asc iaps
 
