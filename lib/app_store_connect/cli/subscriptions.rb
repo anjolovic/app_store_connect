@@ -958,17 +958,32 @@ module AppStoreConnect
         sub = find_subscription_by_product_id!(product_id)
 
         points = []
-        next_cursor = cursor
-        loop do
+        next_cursor = nil
+        max_limit = 2000
+
+        if all || search_price
+          if cursor
+            puts "\e[33mWarning: --after is not supported for subscription price points; ignoring.\e[0m"
+            cursor = nil
+          end
+
+          limit = [limit, max_limit].min
+          limit = max_limit if limit < max_limit
+
+          points = client.subscription_price_points_all(
+            subscription_id: sub['id'],
+            territory: territory,
+            limit: limit
+          )
+        else
           page = client.subscription_price_points_page(
             subscription_id: sub['id'],
             territory: territory,
             limit: limit,
-            cursor: next_cursor
+            cursor: cursor
           )
-          points.concat(page[:data])
+          points = page[:data]
           next_cursor = page[:next_cursor]
-          break unless all && next_cursor
         end
 
         if search_price

@@ -362,15 +362,47 @@ RSpec.describe AppStoreConnect::Client do
       }
     end
 
-    before do
-      stub_api_get('/taxCategories?limit=200', response_body: tax_categories_response)
-    end
-
     it 'returns a list of tax categories' do
+      stub_api_get('/taxCategories?limit=200', response_body: tax_categories_response)
       categories = client.tax_categories
       expect(categories.length).to eq(2)
       expect(categories.first[:id]).to eq('TAX001')
       expect(categories.first[:name]).to eq('Standard')
+    end
+
+    it 'falls back to app-scoped tax categories when global endpoint is missing' do
+      stub_api_get(
+        '/taxCategories?limit=200',
+        response_body: sample_error_response(title: 'Not Found', detail: 'resource does not exist'),
+        status: 404
+      )
+      stub_api_get(
+        '/apps/123456789/taxCategories?limit=200',
+        response_body: tax_categories_response
+      )
+
+      categories = client.tax_categories
+      expect(categories.length).to eq(2)
+      expect(categories.first[:id]).to eq('TAX001')
+    end
+
+    it 'raises a helpful error when app id is missing and global endpoint is missing' do
+      no_app_client = described_class.new(
+        key_id: 'TEST_KEY_ID',
+        issuer_id: 'TEST_ISSUER_ID',
+        private_key_path: key_file.path
+      )
+
+      stub_api_get(
+        '/taxCategories?limit=200',
+        response_body: sample_error_response(title: 'Not Found', detail: 'resource does not exist'),
+        status: 404
+      )
+
+      expect { no_app_client.tax_categories }.to raise_error(
+        AppStoreConnect::ApiError,
+        /APP_STORE_CONNECT_APP_ID/
+      )
     end
   end
 

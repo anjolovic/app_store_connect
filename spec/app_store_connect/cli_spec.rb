@@ -359,7 +359,7 @@ RSpec.describe AppStoreConnect::CLI do
         )
 
         stub_api_get(
-          '/subscriptions/sub_new/pricePoints?filter[territory]=USA&include=territory&limit=200',
+          '/subscriptions/sub_new/pricePoints?filter[territory]=USA&include=territory&limit=2000',
           response_body: {
             data: [
               { id: 'price_point_1', type: 'subscriptionPricePoints' }
@@ -502,7 +502,7 @@ RSpec.describe AppStoreConnect::CLI do
           }
         )
         stub_api_get(
-          '/subscriptions/sub1/pricePoints?filter[territory]=USA&include=territory&limit=200',
+          '/subscriptions/sub1/pricePoints?filter[territory]=USA&include=territory&limit=2000',
           response_body: { data: [{ id: 'price_point_1', type: 'subscriptionPricePoints' }] }
         )
         stub_api_post(
@@ -632,7 +632,7 @@ RSpec.describe AppStoreConnect::CLI do
       it 'filters price points by customer price' do
         stub_subscription(product_id: 'com.example.app.plan.monthly', sub_id: 'sub1')
         stub_api_get(
-          '/subscriptions/sub1/pricePoints?filter[territory]=USA&include=territory&limit=200',
+          '/subscriptions/sub1/pricePoints?filter[territory]=USA&include=territory&limit=2000',
           response_body: {
             data: [
               { id: 'price_point_59', type: 'subscriptionPricePoints', attributes: { customerPrice: '59.00' } },

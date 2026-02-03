@@ -180,6 +180,7 @@ asc set-sub-availability com.example.app.plan.monthly USA CAN GBR --available-in
 
 # Price points and schedule
 asc sub-price-points com.example.app.plan.monthly USA --all
+# Note: --all uses a large limit (2000) because cursor pagination is unreliable for this endpoint.
 asc sub-price-points com.example.app.plan.monthly USA --limit 50 --after CURSOR
 asc sub-price-points com.example.app.plan.monthly USA --search-price 599
 asc sub-prices com.example.app.plan.monthly

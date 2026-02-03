@@ -323,11 +323,27 @@ module AppStoreConnect
 
       # List available tax categories
       def tax_categories(limit: 200)
-        get("/taxCategories?limit=#{limit}")['data'].map do |category|
+        response = get('/taxCategories', params: { 'limit' => limit })
+        response['data'].map do |category|
           {
             id: category['id'],
             name: category.dig('attributes', 'name')
           }
+        end
+      rescue ApiError => e
+        if e.message.include?('Not found') && @app_id
+          response = get("/apps/#{@app_id}/taxCategories", params: { 'limit' => limit })
+          response['data'].map do |category|
+            {
+              id: category['id'],
+              name: category.dig('attributes', 'name')
+            }
+          end
+        elsif e.message.include?('Not found')
+          raise ApiError,
+                'Tax categories endpoint not available. Set APP_STORE_CONNECT_APP_ID to use /apps/{app_id}/taxCategories.'
+        else
+          raise
         end
       end
 

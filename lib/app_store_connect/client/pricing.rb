@@ -29,24 +29,15 @@ module AppStoreConnect
         }
       end
 
-      # Get all subscription price points for a territory
-      def subscription_price_points_all(subscription_id:, territory: 'USA', limit: 200)
-        points = []
-        cursor = nil
-
-        loop do
-          page = subscription_price_points_page(
-            subscription_id: subscription_id,
-            territory: territory,
-            limit: limit,
-            cursor: cursor
-          )
-          points.concat(page[:data])
-          cursor = page[:next_cursor]
-          break unless cursor
-        end
-
-        points
+      # Get all subscription price points for a territory.
+      # Note: ASC does not reliably accept page[cursor] for this endpoint,
+      # so this method uses a single request with a large limit.
+      def subscription_price_points_all(subscription_id:, territory: 'USA', limit: 2000)
+        subscription_price_points_page(
+          subscription_id: subscription_id,
+          territory: territory,
+          limit: limit
+        )[:data]
       end
 
       # Get current subscription prices
