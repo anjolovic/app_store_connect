@@ -52,7 +52,7 @@ module AppStoreConnect
       sub-price-points sub-prices add-sub-price
       sub-image upload-sub-image delete-sub-image
       sub-review-screenshot upload-sub-review-screenshot delete-sub-review-screenshot
-      set-sub-tax-category
+      set-sub-tax-category tax-categories
       sub-localizations update-sub-localization
       sub-intro-offers delete-sub-intro-offer
       update-sub-description update-sub-note delete-sub

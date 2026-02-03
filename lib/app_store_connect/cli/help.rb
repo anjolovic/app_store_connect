@@ -67,6 +67,7 @@ module AppStoreConnect
             upload-sub-review-screenshot <id> <file> Upload subscription review screenshot
             delete-sub-review-screenshot <id>     Delete subscription review screenshot
             set-sub-tax-category <id> <tax_id>    Update subscription tax category
+            tax-categories [limit]               List available tax categories
             update-sub-localization <id> <locale> Update or create localization
             delete-sub-intro-offer <offer_id>     Delete introductory offer
             delete-sub <product_id>               Delete a draft subscription
@@ -230,6 +231,7 @@ module AppStoreConnect
             # Subscription assets:
             asc upload-sub-image com.example.app.plan.starter.monthly ~/Desktop/subscription.png
             asc upload-sub-review-screenshot com.example.app.plan.starter.monthly ~/Desktop/review.png
+            asc tax-categories
 
             # Create subscription with price + intro offer:
             asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m --group "Main Plans" --create-group --price-point PRICE_POINT_ID --intro-offer FREE_TRIAL --intro-duration 1w --intro-price-point INTRO_PRICE_POINT_ID

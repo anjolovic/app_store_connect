@@ -305,6 +305,16 @@ module AppStoreConnect
               })
       end
 
+      # List available tax categories
+      def tax_categories(limit: 200)
+        get("/taxCategories?limit=#{limit}")['data'].map do |category|
+          {
+            id: category['id'],
+            name: category.dig('attributes', 'name')
+          }
+        end
+      end
+
       # Create an introductory offer for a subscription
       def create_subscription_introductory_offer(subscription_id:, offer_mode:, duration:, subscription_price_point_id:)
         body = {

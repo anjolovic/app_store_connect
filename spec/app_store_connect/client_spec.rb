@@ -352,6 +352,28 @@ RSpec.describe AppStoreConnect::Client do
     end
   end
 
+  describe '#tax_categories' do
+    let(:tax_categories_response) do
+      {
+        data: [
+          { id: 'TAX001', type: 'taxCategories', attributes: { name: 'Standard' } },
+          { id: 'TAX002', type: 'taxCategories', attributes: { name: 'Reduced' } }
+        ]
+      }
+    end
+
+    before do
+      stub_api_get('/taxCategories?limit=200', response_body: tax_categories_response)
+    end
+
+    it 'returns a list of tax categories' do
+      categories = client.tax_categories
+      expect(categories.length).to eq(2)
+      expect(categories.first[:id]).to eq('TAX001')
+      expect(categories.first[:name]).to eq('Standard')
+    end
+  end
+
   describe '#create_beta_group' do
     let(:new_group_response) do
       {

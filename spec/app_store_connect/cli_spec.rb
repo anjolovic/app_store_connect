@@ -625,6 +625,21 @@ RSpec.describe AppStoreConnect::CLI do
 
         expect { cli.run }.to output(/Subscription price added!/).to_stdout
       end
+
+      it 'lists tax categories' do
+        stub_api_get(
+          '/taxCategories?limit=200',
+          response_body: {
+            data: [
+              { id: 'TAX001', type: 'taxCategories', attributes: { name: 'Standard' } }
+            ]
+          }
+        )
+
+        cli = described_class.new(['tax-categories'])
+
+        expect { cli.run }.to output(/TAX001/).to_stdout
+      end
     end
 
     context 'when configuration is missing' do
@@ -683,7 +698,7 @@ RSpec.describe AppStoreConnect::CLI do
         sub-availability set-sub-availability sub-price-points sub-prices add-sub-price
         sub-image upload-sub-image delete-sub-image
         sub-review-screenshot upload-sub-review-screenshot delete-sub-review-screenshot
-        set-sub-tax-category sub-localizations update-sub-localization
+        set-sub-tax-category tax-categories sub-localizations update-sub-localization
         sub-intro-offers delete-sub-intro-offer
       ]
 

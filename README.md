@@ -203,6 +203,7 @@ asc delete-sub-intro-offer OFFER_ID
 
 # Tax category
 asc set-sub-tax-category com.example.app.plan.monthly TAX_CATEGORY_ID
+asc tax-categories
 ```
 
 ### Responding to Apple Review Requests
@@ -478,6 +479,7 @@ client.create_customer_review_response(
 | `subscription_images` | Get subscription images |
 | `subscription_review_screenshot` | Get subscription review screenshot |
 | `subscription_introductory_offers` | List subscription intro offers |
+| `tax_categories` | List available tax categories |
 | `subscription_prices` | Get subscription prices |
 | `builds` | List recent builds |
 | `app_store_version_localizations` | Get version localizations |

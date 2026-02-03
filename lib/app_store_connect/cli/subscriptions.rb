@@ -1139,6 +1139,33 @@ module AppStoreConnect
         puts "\e[31mError: #{e.message}\e[0m"
       end
 
+      def cmd_tax_categories
+        limit = 200
+        if @options.any?
+          begin
+            limit = Integer(@options[0], 10)
+          rescue ArgumentError, TypeError
+            puts "\e[31mUsage: asc tax-categories [limit]\e[0m"
+            exit 1
+          end
+        end
+
+        categories = client.tax_categories(limit: limit)
+        if categories.empty?
+          puts 'No tax categories found.'
+          return
+        end
+
+        puts "\e[1mTax Categories\e[0m"
+        puts '=' * 50
+        categories.each do |category|
+          name = category[:name] || '(no name)'
+          puts "  - #{category[:id]}: #{name}"
+        end
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
       def cmd_sub_localizations
         if @options.empty?
           puts "\e[31mUsage: asc sub-localizations <product_id>\e[0m"
