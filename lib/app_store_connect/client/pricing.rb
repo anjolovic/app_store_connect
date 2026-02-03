@@ -21,6 +21,29 @@ module AppStoreConnect
         end
       end
 
+      # Create a subscription price
+      def create_subscription_price(subscription_id:, subscription_price_point_id:, start_date: nil)
+        data = {
+          type: 'subscriptionPrices',
+          relationships: {
+            subscription: {
+              data: { type: 'subscriptions', id: subscription_id }
+            },
+            subscriptionPricePoint: {
+              data: { type: 'subscriptionPricePoints', id: subscription_price_point_id }
+            }
+          }
+        }
+        data[:attributes] = { startDate: start_date } if start_date
+
+        result = post('/subscriptionPrices', body: { data: data })['data']
+        {
+          id: result['id'],
+          start_date: result.dig('attributes', 'startDate'),
+          price_point_id: result.dig('relationships', 'subscriptionPricePoint', 'data', 'id')
+        }
+      end
+
       # Get app price schedule (current and future prices)
       def app_price_schedule(target_app_id: nil)
         target_app_id ||= @app_id

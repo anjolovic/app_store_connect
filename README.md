@@ -119,6 +119,12 @@ asc sub-details
 # Create a subscription product
 asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m --group "Main Plans" --create-group
 
+# Create with price + intro offer (example)
+asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m \
+  --group "Main Plans" --create-group \
+  --price-point PRICE_POINT_ID --price-start-date 2026-03-01 \
+  --intro-offer FREE_TRIAL --intro-duration 1w --intro-price-point INTRO_PRICE_POINT_ID
+
 # View in-app purchases
 asc iaps
 
@@ -136,6 +142,27 @@ asc apps
 
 # List recent builds
 asc builds
+```
+
+### Create Subscription Options
+
+```bash
+# Dry run (no changes)
+asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m --group "Main Plans" --create-group --dry-run
+
+# Skip confirmation + JSON output
+asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m --group-id 12345 --yes --json
+
+# Add localizations
+asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m \
+  --group-id 12345 \
+  --add-localization "en-US:Monthly Plan:Access premium features" \
+  --add-localization "fr-FR:Forfait mensuel:Acces aux fonctionnalites premium"
+
+# Localizations from file (JSON or YAML)
+asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m \
+  --group-id 12345 \
+  --localizations-file ./config/subscription_localizations.yml
 ```
 
 ### Responding to Apple Review Requests
@@ -459,6 +486,8 @@ client.create_customer_review_response(
 | `create_subscription_localization` | Create new subscription localization |
 | `create_subscription` | Create a subscription product |
 | `create_subscription_group` | Create a subscription group |
+| `create_subscription_price` | Set a subscription price |
+| `create_subscription_introductory_offer` | Create an introductory offer |
 | `update_app_store_version_localization` | Update version metadata |
 | `update_app_store_review_detail` | Update reviewer notes |
 | `update_beta_app_review_detail` | Update TestFlight notes |

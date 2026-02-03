@@ -279,6 +279,79 @@ RSpec.describe AppStoreConnect::Client do
     end
   end
 
+  describe '#create_subscription_price' do
+    let(:subscription_price_response) do
+      {
+        data: {
+          id: 'sub_price_1',
+          type: 'subscriptionPrices',
+          attributes: {
+            startDate: '2026-03-01'
+          },
+          relationships: {
+            subscriptionPricePoint: {
+              data: { id: 'price_point_1', type: 'subscriptionPricePoints' }
+            }
+          }
+        }
+      }
+    end
+
+    before do
+      stub_api_post('/subscriptionPrices', response_body: subscription_price_response)
+    end
+
+    it 'creates a subscription price' do
+      result = client.create_subscription_price(
+        subscription_id: 'sub_1',
+        subscription_price_point_id: 'price_point_1',
+        start_date: '2026-03-01'
+      )
+
+      expect(result[:id]).to eq('sub_price_1')
+      expect(result[:price_point_id]).to eq('price_point_1')
+      expect(result[:start_date]).to eq('2026-03-01')
+    end
+  end
+
+  describe '#create_subscription_introductory_offer' do
+    let(:intro_offer_response) do
+      {
+        data: {
+          id: 'intro_1',
+          type: 'subscriptionIntroductoryOffers',
+          attributes: {
+            offerMode: 'FREE_TRIAL',
+            duration: 'ONE_WEEK'
+          },
+          relationships: {
+            subscriptionPricePoint: {
+              data: { id: 'price_point_1', type: 'subscriptionPricePoints' }
+            }
+          }
+        }
+      }
+    end
+
+    before do
+      stub_api_post('/subscriptionIntroductoryOffers', response_body: intro_offer_response)
+    end
+
+    it 'creates an introductory offer' do
+      result = client.create_subscription_introductory_offer(
+        subscription_id: 'sub_1',
+        offer_mode: 'FREE_TRIAL',
+        duration: 'ONE_WEEK',
+        subscription_price_point_id: 'price_point_1'
+      )
+
+      expect(result[:id]).to eq('intro_1')
+      expect(result[:offer_mode]).to eq('FREE_TRIAL')
+      expect(result[:duration]).to eq('ONE_WEEK')
+      expect(result[:price_point_id]).to eq('price_point_1')
+    end
+  end
+
   describe '#create_beta_group' do
     let(:new_group_response) do
       {

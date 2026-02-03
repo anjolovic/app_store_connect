@@ -227,6 +227,18 @@ RSpec.describe AppStoreConnect::CLI do
         expect { cli.run }.to output(/Subscription already exists/).to_stdout.and raise_error(SystemExit)
       end
 
+      it 'errors when --json is used without --yes' do
+        cli = described_class.new([
+                                   'create-sub',
+                                   'com.example.app.plan.monthly',
+                                   'Monthly Plan',
+                                   '1m',
+                                   '--json'
+                                 ])
+
+        expect { cli.run }.to output(/--json requires --yes/).to_stdout.and raise_error(SystemExit)
+      end
+
       it 'errors when product id is already used by an IAP' do
         stub_api_get('/apps/123456789/subscriptionGroups', response_body: { data: [] })
         stub_api_get(
@@ -279,7 +291,27 @@ RSpec.describe AppStoreConnect::CLI do
         expect { cli.run }.to output(/Multiple subscription groups found/).to_stdout.and raise_error(SystemExit)
       end
 
-      it 'creates a subscription with new group and localization' do
+      it 'supports dry run without creating resources' do
+        stub_api_get('/apps/123456789/subscriptionGroups', response_body: { data: [] })
+        stub_api_get('/apps/123456789/inAppPurchasesV2', response_body: { data: [] })
+
+        cli = described_class.new([
+                                   'create-sub',
+                                   'com.example.app.plan.monthly',
+                                   'Monthly Plan',
+                                   '1m',
+                                   '--group',
+                                   'Main Plans',
+                                   '--create-group',
+                                   '--dry-run'
+                                 ])
+
+        expect { cli.run }.to output(/Dry run/).to_stdout
+        expect(WebMock).not_to have_requested(:post, /subscriptionGroups/)
+        expect(WebMock).not_to have_requested(:post, /subscriptions/)
+      end
+
+      it 'creates a subscription with pricing, intro offer, and localizations' do
         stub_api_get('/apps/123456789/subscriptionGroups', response_body: { data: [] })
         stub_api_get('/apps/123456789/inAppPurchasesV2', response_body: { data: [] })
 
@@ -326,26 +358,95 @@ RSpec.describe AppStoreConnect::CLI do
           }
         )
 
-        cli = described_class.new([
-                                   'create-sub',
-                                   'com.example.app.plan.monthly',
-                                   'Monthly Plan',
-                                   '1m',
-                                   '--group',
-                                   'Main Plans',
-                                   '--create-group',
-                                   '--group-level',
-                                   '1',
-                                   '--locale',
-                                   'en-US',
-                                   '--display-name',
-                                   'Monthly Plan',
-                                   '--description',
-                                   'Access premium features'
-                                 ])
+        stub_api_get(
+          '/subscriptions/sub_new/pricePoints?filter[territory]=USA&include=territory',
+          response_body: {
+            data: [
+              { id: 'price_point_1', type: 'subscriptionPricePoints' }
+            ]
+          }
+        )
 
-        with_stdin("y\n") do
+        stub_api_post(
+          '/subscriptionPrices',
+          response_body: {
+            data: {
+              id: 'price_1',
+              type: 'subscriptionPrices',
+              attributes: { startDate: '2026-03-01' },
+              relationships: {
+                subscriptionPricePoint: {
+                  data: { id: 'price_point_1', type: 'subscriptionPricePoints' }
+                }
+              }
+            }
+          }
+        )
+
+        stub_api_post(
+          '/subscriptionIntroductoryOffers',
+          response_body: {
+            data: {
+              id: 'intro_1',
+              type: 'subscriptionIntroductoryOffers',
+              attributes: { offerMode: 'FREE_TRIAL', duration: 'ONE_WEEK' },
+              relationships: {
+                subscriptionPricePoint: {
+                  data: { id: 'intro_price_1', type: 'subscriptionPricePoints' }
+                }
+              }
+            }
+          }
+        )
+
+        file = Tempfile.new(['localizations', '.yml'])
+        begin
+          file.write(<<~YAML)
+            - locale: fr-FR
+              name: Forfait mensuel
+              description: Acces premium
+          YAML
+          file.rewind
+
+          cli = described_class.new([
+                                     'create-sub',
+                                     'com.example.app.plan.monthly',
+                                     'Monthly Plan',
+                                     '1m',
+                                     '--group',
+                                     'Main Plans',
+                                     '--create-group',
+                                     '--group-level',
+                                     '1',
+                                     '--locale',
+                                     'en-US',
+                                     '--display-name',
+                                     'Monthly Plan',
+                                     '--description',
+                                     'Access premium features',
+                                     '--localizations-file',
+                                     file.path,
+                                     '--add-localization',
+                                     'es-ES:Plan mensual:Acceso premium',
+                                     '--price-point',
+                                     'price_point_1',
+                                     '--price-territory',
+                                     'USA',
+                                     '--price-start-date',
+                                     '2026-03-01',
+                                     '--intro-offer',
+                                     'FREE_TRIAL',
+                                     '--intro-duration',
+                                     '1w',
+                                     '--intro-price-point',
+                                     'intro_price_1',
+                                     '--yes'
+                                   ])
+
           expect { cli.run }.to output(/Subscription created!/).to_stdout
+        ensure
+          file.close
+          file.unlink
         end
       end
     end

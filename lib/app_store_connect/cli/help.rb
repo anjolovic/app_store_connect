@@ -198,6 +198,9 @@ module AppStoreConnect
             # If Apple requests subscription description update:
             asc update-sub-description com.example.app.plan.starter.monthly "Access to basic features"
 
+            # Create subscription with price + intro offer:
+            asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m --group "Main Plans" --create-group --price-point PRICE_POINT_ID --intro-offer FREE_TRIAL --intro-duration 1w --intro-price-point INTRO_PRICE_POINT_ID
+
             # If Apple requests IAP metadata update:
             asc update-iap-note com.example.app.coins.100 "Unlocks 100 coins for gameplay"
             asc update-iap-description com.example.app.coins.100 "Get 100 coins to use in-game"

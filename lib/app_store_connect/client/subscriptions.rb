@@ -79,6 +79,35 @@ module AppStoreConnect
         }
       end
 
+      # Create an introductory offer for a subscription
+      def create_subscription_introductory_offer(subscription_id:, offer_mode:, duration:, subscription_price_point_id:)
+        body = {
+          data: {
+            type: 'subscriptionIntroductoryOffers',
+            attributes: {
+              offerMode: offer_mode,
+              duration: duration
+            },
+            relationships: {
+              subscription: {
+                data: { type: 'subscriptions', id: subscription_id }
+              },
+              subscriptionPricePoint: {
+                data: { type: 'subscriptionPricePoints', id: subscription_price_point_id }
+              }
+            }
+          }
+        }
+
+        result = post('/subscriptionIntroductoryOffers', body: body)['data']
+        {
+          id: result['id'],
+          offer_mode: result.dig('attributes', 'offerMode'),
+          duration: result.dig('attributes', 'duration'),
+          price_point_id: result.dig('relationships', 'subscriptionPricePoint', 'data', 'id')
+        }
+      end
+
       # Get subscription localizations
       def subscription_localizations(subscription_id:)
         get("/subscriptions/#{subscription_id}/subscriptionLocalizations")['data'].map do |loc|
