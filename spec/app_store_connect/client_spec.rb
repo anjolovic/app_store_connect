@@ -419,7 +419,7 @@ RSpec.describe AppStoreConnect::Client do
 
       expect { client.tax_categories }.to raise_error(
         AppStoreConnect::ApiError,
-        /Tax categories endpoint not available for this account/
+        /Tax categories endpoint not available/
       )
     end
   end

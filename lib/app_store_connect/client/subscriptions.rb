@@ -342,7 +342,8 @@ module AppStoreConnect
           rescue ApiError => inner
             if inner.message.include?('Not found')
               raise ApiError,
-                    'Tax categories endpoint not available for this account. Set tax category in App Store Connect UI.'
+                    'Tax categories endpoint not available (global and app-scoped endpoints returned 404). ' \
+                    'Set tax category in App Store Connect UI.'
             end
             raise
           end
