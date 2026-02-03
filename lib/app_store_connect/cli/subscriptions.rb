@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'date'
+require 'bigdecimal'
 require 'json'
 require 'yaml'
 
@@ -375,7 +376,7 @@ module AppStoreConnect
         if price_point_id
           if price_territory
             begin
-              price_points = client.subscription_price_points(
+              price_points = client.subscription_price_points_all(
                 subscription_id: subscription[:id],
                 territory: price_territory
               )
@@ -695,7 +696,7 @@ module AppStoreConnect
         if price_point_id
           if price_territory
             begin
-              price_points = client.subscription_price_points(subscription_id: sub_id, territory: price_territory)
+              price_points = client.subscription_price_points_all(subscription_id: sub_id, territory: price_territory)
               price_point_ids = price_points.map { |p| p['id'] }
               unless price_point_ids.include?(price_point_id)
                 puts "\e[33mWarning: Price point #{price_point_id} not found for territory #{price_territory}; skipping price creation.\e[0m"
@@ -799,9 +800,9 @@ module AppStoreConnect
 
       def cmd_set_sub_availability
         if @options.empty?
-          puts "\e[31mUsage: asc set-sub-availability <product_id> <territories...> [--all] [--yes] [--dry-run]\e[0m"
-          puts 'Example: asc set-sub-availability com.example.app.plan.monthly USA CAN GBR'
-          puts 'Example: asc set-sub-availability com.example.app.plan.monthly --all'
+          puts "\e[31mUsage: asc set-sub-availability <product_id> <territories...> [--all] [--available-in-new-territories true|false] [--yes] [--dry-run]\e[0m"
+          puts 'Example: asc set-sub-availability com.example.app.plan.monthly USA CAN GBR --available-in-new-territories true'
+          puts 'Example: asc set-sub-availability com.example.app.plan.monthly --all --available-in-new-territories false'
           exit 1
         end
 
@@ -810,7 +811,24 @@ module AppStoreConnect
         all = args.delete('--all')
         dry_run = args.delete('--dry-run')
         no_confirm = args.delete('--yes') || args.delete('--no-confirm')
-        territories = args.map { |t| t.strip.upcase }.reject(&:empty?)
+        available_in_new = nil
+
+        parsed = []
+        while args.any?
+          arg = args.shift
+          case arg
+          when '--available-in-new-territories', '--new-territories'
+            available_in_new = parse_bool(args.shift)
+            if available_in_new.nil?
+              puts "\e[31m--available-in-new-territories must be true/false.\e[0m"
+              exit 1
+            end
+          else
+            parsed << arg
+          end
+        end
+
+        territories = parsed.map { |t| t.strip.upcase }.reject(&:empty?)
 
         if !all && territories.empty?
           puts "\e[31mPlease specify territories or use --all.\e[0m"
@@ -833,6 +851,7 @@ module AppStoreConnect
         puts '=' * 50
         puts "  Product ID: #{product_id}"
         puts "  Territories: #{territory_ids.join(', ')}"
+        puts "  Available In New Territories: #{available_in_new}" unless available_in_new.nil?
 
         if dry_run
           puts "\e[33mDry run: no changes made.\e[0m"
@@ -846,14 +865,25 @@ module AppStoreConnect
         end
 
         if availability_id
+          if !available_in_new.nil?
+            client.update_subscription_availability_attributes(
+              availability_id: availability_id,
+              available_in_new_territories: available_in_new
+            )
+          end
           client.update_subscription_availability(
             availability_id: availability_id,
             territory_ids: territory_ids
           )
         else
+          if available_in_new.nil?
+            puts "\e[31mMissing --available-in-new-territories when creating availability.\e[0m"
+            exit 1
+          end
           client.create_subscription_availability(
             subscription_id: sub['id'],
-            territory_ids: territory_ids
+            territory_ids: territory_ids,
+            available_in_new_territories: available_in_new
           )
         end
 
@@ -864,26 +894,120 @@ module AppStoreConnect
 
       def cmd_sub_price_points
         if @options.empty?
-          puts "\e[31mUsage: asc sub-price-points <product_id> [territory]\e[0m"
-          puts 'Example: asc sub-price-points com.example.app.plan.monthly USA'
+          puts "\e[31mUsage: asc sub-price-points <product_id> [territory] [--limit N] [--after CURSOR] [--all] [--search-price VALUE]\e[0m"
+          puts 'Example: asc sub-price-points com.example.app.plan.monthly USA --all'
+          puts 'Example: asc sub-price-points com.example.app.plan.monthly USA --search-price 599'
           exit 1
         end
 
-        product_id = @options[0]
-        territory = @options[1] || 'USA'
+        args = @options.dup
+        product_id = args.shift
+        territory = 'USA'
+        limit = 200
+        cursor = nil
+        all = false
+        search_price = nil
+
+        while args.any?
+          arg = args.shift
+          case arg
+          when '--limit'
+            raw = args.shift
+            if raw.nil?
+              puts "\e[31m--limit requires a value.\e[0m"
+              exit 1
+            end
+
+            begin
+              limit = Integer(raw, 10)
+            rescue ArgumentError, TypeError
+              puts "\e[31m--limit must be an integer.\e[0m"
+              exit 1
+            end
+
+            if limit <= 0
+              puts "\e[31m--limit must be greater than 0.\e[0m"
+              exit 1
+            end
+          when '--after'
+            cursor = args.shift
+            if cursor.nil? || cursor.strip.empty?
+              puts "\e[31m--after requires a value.\e[0m"
+              exit 1
+            end
+          when '--all'
+            all = true
+          when '--search-price'
+            search_price = args.shift
+            if search_price.nil? || search_price.strip.empty?
+              puts "\e[31m--search-price requires a value.\e[0m"
+              exit 1
+            end
+          else
+            if territory == 'USA'
+              territory = arg
+            else
+              puts "\e[31mUnknown argument: #{arg}\e[0m"
+              exit 1
+            end
+          end
+        end
+
+        all = true if search_price && !all && cursor.nil? && limit == 200
 
         sub = find_subscription_by_product_id!(product_id)
-        points = client.subscription_price_points(subscription_id: sub['id'], territory: territory)
+
+        points = []
+        next_cursor = cursor
+        loop do
+          page = client.subscription_price_points_page(
+            subscription_id: sub['id'],
+            territory: territory,
+            limit: limit,
+            cursor: next_cursor
+          )
+          points.concat(page[:data])
+          next_cursor = page[:next_cursor]
+          break unless all && next_cursor
+        end
+
+        if search_price
+          search_values = search_price.to_s.split('/').map(&:strip).reject(&:empty?)
+          normalized_targets = search_values.map { |value| normalize_price_value(value) }.compact
+
+          if normalized_targets.empty?
+            puts "\e[31mInvalid --search-price value.\e[0m"
+            exit 1
+          end
+
+          points = points.select do |point|
+            attrs = point['attributes'] || {}
+            price = attrs['customerPrice'] || attrs['price']
+            normalized = normalize_price_value(price)
+            normalized && normalized_targets.include?(normalized)
+          end
+        end
 
         puts "\e[1mSubscription Price Points (#{territory})\e[0m"
         puts '=' * 50
-        points.each do |point|
-          attrs = point['attributes'] || {}
-          price = attrs['customerPrice'] || attrs['price']
-          proceeds = attrs['proceeds']
-          label = [price, proceeds].compact.join(' / ')
-          label = "(#{label})" unless label.empty?
-          puts "  - #{point['id']} #{label}"
+
+        if points.empty?
+          puts 'No price points found.'
+        else
+          points.each do |point|
+            attrs = point['attributes'] || {}
+            price = attrs['customerPrice'] || attrs['price']
+            proceeds = attrs['proceeds']
+            label = [price, proceeds].compact.join(' / ')
+            label = "(#{label})" unless label.empty?
+            puts "  - #{point['id']} #{label}"
+          end
+        end
+
+        if !all && next_cursor
+          puts
+          puts "Next cursor: #{next_cursor}"
+          puts "Use: asc sub-price-points #{product_id} #{territory} --after #{next_cursor}"
         end
       rescue ApiError => e
         puts "\e[31mError: #{e.message}\e[0m"
@@ -1731,6 +1855,30 @@ module AppStoreConnect
         else
           puts "\e[33mDry run: no changes made.\e[0m"
         end
+      end
+
+      def parse_bool(value)
+        case value.to_s.strip.downcase
+        when 'true', 'yes', '1'
+          true
+        when 'false', 'no', '0'
+          false
+        else
+          nil
+        end
+      end
+
+      def normalize_price_value(value)
+        return nil if value.nil?
+
+        raw = value.to_s.strip
+        raw = raw.gsub(',', '')
+        raw = raw.gsub(/[^\d.]/, '')
+        return nil if raw.empty?
+
+        BigDecimal(raw).round(2).to_s('F')
+      rescue ArgumentError
+        nil
       end
     end
   end

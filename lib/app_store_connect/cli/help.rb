@@ -22,7 +22,7 @@ module AppStoreConnect
             subs              List subscription products
             sub-details       Detailed subscription info with localizations
             sub-availability  Show subscription availability territories
-            sub-price-points  List subscription price points for territory
+            sub-price-points  List subscription price points for territory (supports pagination)
             sub-prices        Show subscription price schedule
             sub-image         Show subscription image
             sub-review-screenshot  Show subscription review screenshot
@@ -60,7 +60,7 @@ module AppStoreConnect
             update-sub-description <id> "desc"    Update subscription description
             update-sub-note <id> "note"           Update subscription review note
             fix-sub-metadata <id> [options]       Add missing subscription metadata
-            set-sub-availability <id> <territories...>  Set subscription availability
+            set-sub-availability <id> <territories...>  Set subscription availability (requires --available-in-new-territories on first set)
             add-sub-price <id> <price_point_id>   Add subscription price schedule
             upload-sub-image <id> <file>          Upload subscription image (1024x1024)
             delete-sub-image <id>                 Delete subscription image

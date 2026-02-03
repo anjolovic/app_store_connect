@@ -1,12 +1,52 @@
 # frozen_string_literal: true
 
+require 'cgi'
+
 module AppStoreConnect
   class Client
     # Pricing and availability methods
     module Pricing
       # Get subscription price points for a territory
       def subscription_price_points(subscription_id:, territory: 'USA')
-        get("/subscriptions/#{subscription_id}/pricePoints?filter[territory]=#{territory}&include=territory")['data']
+        subscription_price_points_page(subscription_id: subscription_id, territory: territory)[:data]
+      end
+
+      # Get subscription price points page (with pagination cursor)
+      def subscription_price_points_page(subscription_id:, territory: 'USA', limit: 200, cursor: nil)
+        params = {
+          'filter[territory]' => territory,
+          'include' => 'territory',
+          'limit' => limit
+        }
+        params['page[cursor]'] = cursor if cursor
+
+        result = get("/subscriptions/#{subscription_id}/pricePoints", params: params)
+        next_cursor = extract_next_cursor(result.dig('links', 'next'))
+
+        {
+          data: result['data'],
+          next_cursor: next_cursor
+        }
+      end
+
+      # Get all subscription price points for a territory
+      def subscription_price_points_all(subscription_id:, territory: 'USA', limit: 200)
+        points = []
+        cursor = nil
+
+        loop do
+          page = subscription_price_points_page(
+            subscription_id: subscription_id,
+            territory: territory,
+            limit: limit,
+            cursor: cursor
+          )
+          points.concat(page[:data])
+          cursor = page[:next_cursor]
+          break unless cursor
+        end
+
+        points
       end
 
       # Get current subscription prices
@@ -20,6 +60,17 @@ module AppStoreConnect
           }
         end
       end
+
+      def extract_next_cursor(next_url)
+        return nil if next_url.nil? || next_url.empty?
+
+        uri = URI(next_url)
+        params = CGI.parse(uri.query.to_s)
+        params['page[cursor]']&.first || params['cursor']&.first || params['after']&.first
+      rescue URI::InvalidURIError
+        nil
+      end
+      private :extract_next_cursor
 
       # Create a subscription price
       def create_subscription_price(subscription_id:, subscription_price_point_id:, start_date: nil)

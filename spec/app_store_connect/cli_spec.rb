@@ -359,7 +359,7 @@ RSpec.describe AppStoreConnect::CLI do
         )
 
         stub_api_get(
-          '/subscriptions/sub_new/pricePoints?filter[territory]=USA&include=territory',
+          '/subscriptions/sub_new/pricePoints?filter[territory]=USA&include=territory&limit=200',
           response_body: {
             data: [
               { id: 'price_point_1', type: 'subscriptionPricePoints' }
@@ -502,7 +502,7 @@ RSpec.describe AppStoreConnect::CLI do
           }
         )
         stub_api_get(
-          '/subscriptions/sub1/pricePoints?filter[territory]=USA&include=territory',
+          '/subscriptions/sub1/pricePoints?filter[territory]=USA&include=territory&limit=200',
           response_body: { data: [{ id: 'price_point_1', type: 'subscriptionPricePoints' }] }
         )
         stub_api_post(
@@ -571,6 +571,8 @@ RSpec.describe AppStoreConnect::CLI do
                                    'set-sub-availability',
                                    'com.example.app.plan.monthly',
                                    'USA',
+                                   '--available-in-new-territories',
+                                   'true',
                                    '--yes'
                                  ])
 
@@ -580,7 +582,7 @@ RSpec.describe AppStoreConnect::CLI do
       it 'lists subscription price points' do
         stub_subscription(product_id: 'com.example.app.plan.monthly', sub_id: 'sub1')
         stub_api_get(
-          '/subscriptions/sub1/pricePoints?filter[territory]=USA&include=territory',
+          '/subscriptions/sub1/pricePoints?filter[territory]=USA&include=territory&limit=200',
           response_body: {
             data: [
               {
@@ -595,6 +597,59 @@ RSpec.describe AppStoreConnect::CLI do
         cli = described_class.new(['sub-price-points', 'com.example.app.plan.monthly', 'USA'])
 
         expect { cli.run }.to output(/price_point_1/).to_stdout
+      end
+
+      it 'supports pagination and shows next cursor' do
+        stub_subscription(product_id: 'com.example.app.plan.monthly', sub_id: 'sub1')
+
+        stub_api_get(
+          '/subscriptions/sub1/pricePoints?filter[territory]=USA&include=territory&limit=1',
+          response_body: {
+            data: [
+              {
+                id: 'price_point_low',
+                type: 'subscriptionPricePoints',
+                attributes: { customerPrice: '4.99', proceeds: '3.50' }
+              }
+            ],
+            links: {
+              next: 'https://api.appstoreconnect.apple.com/v1/subscriptions/sub1/pricePoints?filter[territory]=USA&include=territory&limit=1&page[cursor]=NEXT_CURSOR'
+            }
+          }
+        )
+
+        cli = described_class.new([
+                                   'sub-price-points',
+                                   'com.example.app.plan.monthly',
+                                   'USA',
+                                   '--limit',
+                                   '1'
+                                 ])
+
+        expect { cli.run }.to output(/Next cursor: NEXT_CURSOR/).to_stdout
+      end
+
+      it 'filters price points by customer price' do
+        stub_subscription(product_id: 'com.example.app.plan.monthly', sub_id: 'sub1')
+        stub_api_get(
+          '/subscriptions/sub1/pricePoints?filter[territory]=USA&include=territory&limit=200',
+          response_body: {
+            data: [
+              { id: 'price_point_59', type: 'subscriptionPricePoints', attributes: { customerPrice: '59.00' } },
+              { id: 'price_point_599', type: 'subscriptionPricePoints', attributes: { customerPrice: '599.00' } }
+            ]
+          }
+        )
+
+        cli = described_class.new([
+                                   'sub-price-points',
+                                   'com.example.app.plan.monthly',
+                                   'USA',
+                                   '--search-price',
+                                   '599'
+                                 ])
+
+        expect { cli.run }.to output(/price_point_599/).to_stdout
       end
 
       it 'adds a subscription price' do

@@ -176,10 +176,12 @@ asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m \
 ```bash
 # Availability (territories)
 asc sub-availability com.example.app.plan.monthly
-asc set-sub-availability com.example.app.plan.monthly USA CAN GBR
+asc set-sub-availability com.example.app.plan.monthly USA CAN GBR --available-in-new-territories true
 
 # Price points and schedule
-asc sub-price-points com.example.app.plan.monthly USA
+asc sub-price-points com.example.app.plan.monthly USA --all
+asc sub-price-points com.example.app.plan.monthly USA --limit 50 --after CURSOR
+asc sub-price-points com.example.app.plan.monthly USA --search-price 599
 asc sub-prices com.example.app.plan.monthly
 asc add-sub-price com.example.app.plan.monthly PRICE_POINT_ID --start-date 2026-03-01
 

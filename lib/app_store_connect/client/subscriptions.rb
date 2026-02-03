@@ -104,10 +104,11 @@ module AppStoreConnect
       end
 
       # Create subscription availability
-      def create_subscription_availability(subscription_id:, territory_ids: [])
+      def create_subscription_availability(subscription_id:, territory_ids: [], available_in_new_territories: nil)
         body = {
           data: {
             type: 'subscriptionAvailabilities',
+            attributes: {},
             relationships: {
               subscription: {
                 data: { type: 'subscriptions', id: subscription_id }
@@ -118,6 +119,8 @@ module AppStoreConnect
             }
           }
         }
+        body[:data][:attributes][:availableInNewTerritories] = available_in_new_territories unless available_in_new_territories.nil?
+        body[:data].delete(:attributes) if body[:data][:attributes].empty?
 
         result = post('/subscriptionAvailabilities', body: body)['data']
         {
@@ -129,6 +132,19 @@ module AppStoreConnect
       def update_subscription_availability(availability_id:, territory_ids:)
         patch("/subscriptionAvailabilities/#{availability_id}/relationships/availableTerritories", body: {
                 data: territory_ids.map { |id| { type: 'territories', id: id } }
+              })
+      end
+
+      # Update subscription availability attributes
+      def update_subscription_availability_attributes(availability_id:, available_in_new_territories:)
+        patch("/subscriptionAvailabilities/#{availability_id}", body: {
+                data: {
+                  type: 'subscriptionAvailabilities',
+                  id: availability_id,
+                  attributes: {
+                    availableInNewTerritories: available_in_new_territories
+                  }
+                }
               })
       end
 
