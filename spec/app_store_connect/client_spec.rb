@@ -404,6 +404,24 @@ RSpec.describe AppStoreConnect::Client do
         /APP_STORE_CONNECT_APP_ID/
       )
     end
+
+    it 'raises a helpful error when app endpoint is also missing' do
+      stub_api_get(
+        '/taxCategories?limit=200',
+        response_body: sample_error_response(title: 'Not Found', detail: 'resource does not exist'),
+        status: 404
+      )
+      stub_api_get(
+        '/apps/123456789/taxCategories?limit=200',
+        response_body: sample_error_response(title: 'Not Found', detail: 'resource does not exist'),
+        status: 404
+      )
+
+      expect { client.tax_categories }.to raise_error(
+        AppStoreConnect::ApiError,
+        /Tax categories endpoint not available for this account/
+      )
+    end
   end
 
   describe '#create_beta_group' do

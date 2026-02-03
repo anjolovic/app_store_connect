@@ -266,8 +266,7 @@ module AppStoreConnect
                                type: 'subscriptionAppStoreReviewScreenshots',
                                attributes: {
                                  fileName: file_name,
-                                 fileSize: file_size,
-                                 sourceFileChecksum: checksum
+                                 fileSize: file_size
                                },
                                relationships: {
                                  subscription: {
@@ -332,12 +331,20 @@ module AppStoreConnect
         end
       rescue ApiError => e
         if e.message.include?('Not found') && @app_id
-          response = get("/apps/#{@app_id}/taxCategories", params: { 'limit' => limit })
-          response['data'].map do |category|
-            {
-              id: category['id'],
-              name: category.dig('attributes', 'name')
-            }
+          begin
+            response = get("/apps/#{@app_id}/taxCategories", params: { 'limit' => limit })
+            response['data'].map do |category|
+              {
+                id: category['id'],
+                name: category.dig('attributes', 'name')
+              }
+            end
+          rescue ApiError => inner
+            if inner.message.include?('Not found')
+              raise ApiError,
+                    'Tax categories endpoint not available for this account. Set tax category in App Store Connect UI.'
+            end
+            raise
           end
         elsif e.message.include?('Not found')
           raise ApiError,

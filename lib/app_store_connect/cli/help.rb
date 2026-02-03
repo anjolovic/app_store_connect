@@ -22,7 +22,7 @@ module AppStoreConnect
             subs              List subscription products
             sub-details       Detailed subscription info with localizations
             sub-availability  Show subscription availability territories
-            sub-price-points  List subscription price points for territory (limit-based pagination)
+            sub-price-points  List subscription price points for territory (limit-based listing)
             sub-prices        Show subscription price schedule
             sub-image         Show subscription image
             sub-review-screenshot  Show subscription review screenshot

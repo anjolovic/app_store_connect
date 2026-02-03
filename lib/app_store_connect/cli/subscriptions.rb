@@ -896,7 +896,7 @@ module AppStoreConnect
 
       def cmd_sub_price_points
         if @options.empty?
-          puts "\e[31mUsage: asc sub-price-points <product_id> [territory] [--limit N] [--after CURSOR] [--all] [--search-price VALUE]\e[0m"
+          puts "\e[31mUsage: asc sub-price-points <product_id> [territory] [--limit N] [--all] [--search-price VALUE]\e[0m"
           puts 'Example: asc sub-price-points com.example.app.plan.monthly USA --all'
           puts 'Example: asc sub-price-points com.example.app.plan.monthly USA --search-price 599'
           exit 1
@@ -960,7 +960,6 @@ module AppStoreConnect
         sub = find_subscription_by_product_id!(product_id)
 
         points = []
-        next_cursor = nil
         max_limit = 2000
 
         if cursor
@@ -985,7 +984,6 @@ module AppStoreConnect
             cursor: cursor
           )
           points = page[:data]
-          next_cursor = page[:next_cursor]
         end
 
         if search_price
@@ -1021,11 +1019,6 @@ module AppStoreConnect
           end
         end
 
-        if !all && next_cursor
-          puts
-          puts "Next cursor: #{next_cursor}"
-          puts "Use: asc sub-price-points #{product_id} #{territory} --after #{next_cursor}"
-        end
       rescue ApiError => e
         puts "\e[31mError: #{e.message}\e[0m"
       end

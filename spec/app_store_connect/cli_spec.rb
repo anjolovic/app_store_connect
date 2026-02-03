@@ -599,7 +599,7 @@ RSpec.describe AppStoreConnect::CLI do
         expect { cli.run }.to output(/price_point_1/).to_stdout
       end
 
-      it 'supports pagination and shows next cursor' do
+      it 'warns when --after is provided' do
         stub_subscription(product_id: 'com.example.app.plan.monthly', sub_id: 'sub1')
 
         stub_api_get(
@@ -623,10 +623,12 @@ RSpec.describe AppStoreConnect::CLI do
                                    'com.example.app.plan.monthly',
                                    'USA',
                                    '--limit',
-                                   '1'
+                                   '1',
+                                   '--after',
+                                   'NEXT_CURSOR'
                                  ])
 
-        expect { cli.run }.to output(/Next cursor: NEXT_CURSOR/).to_stdout
+        expect { cli.run }.to output(/--after is not supported/).to_stdout
       end
 
       it 'filters price points by customer price' do
