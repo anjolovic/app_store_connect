@@ -47,7 +47,15 @@ module AppStoreConnect
       status review rejection session subs subscriptions builds apps ready help
       review-info update-review-notes update-review-contact update-demo-account
       cancel-review submit create-review-detail content-rights set-content-rights
-      sub-details create-sub create-subscription fix-sub-metadata update-sub-description update-sub-note delete-sub
+      sub-details create-sub create-subscription fix-sub-metadata
+      sub-availability set-sub-availability
+      sub-price-points sub-prices add-sub-price
+      sub-image upload-sub-image delete-sub-image
+      sub-review-screenshot upload-sub-review-screenshot delete-sub-review-screenshot
+      set-sub-tax-category
+      sub-localizations update-sub-localization
+      sub-intro-offers delete-sub-intro-offer
+      update-sub-description update-sub-note delete-sub
       version-info update-whats-new description update-description
       keywords update-keywords urls update-marketing-url update-support-url
       update-promotional-text update-privacy-url

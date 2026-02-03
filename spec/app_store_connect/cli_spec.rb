@@ -541,6 +541,92 @@ RSpec.describe AppStoreConnect::CLI do
       end
     end
 
+    context 'with subscription management commands' do
+      it 'shows subscription availability when none configured' do
+        stub_subscription(product_id: 'com.example.app.plan.monthly', sub_id: 'sub1')
+        stub_api_get(
+          '/subscriptions/sub1/subscriptionAvailability?include=availableTerritories',
+          response_body: sample_error_response(title: 'Not Found', detail: 'Availability not found'),
+          status: 404
+        )
+
+        cli = described_class.new(['sub-availability', 'com.example.app.plan.monthly'])
+
+        expect { cli.run }.to output(/No availability configured/).to_stdout
+      end
+
+      it 'sets subscription availability for territories' do
+        stub_subscription(product_id: 'com.example.app.plan.monthly', sub_id: 'sub1')
+        stub_api_get(
+          '/subscriptions/sub1/subscriptionAvailability?include=availableTerritories',
+          response_body: sample_error_response(title: 'Not Found', detail: 'Availability not found'),
+          status: 404
+        )
+        stub_api_post(
+          '/subscriptionAvailabilities',
+          response_body: { data: { id: 'avail1', type: 'subscriptionAvailabilities' } }
+        )
+
+        cli = described_class.new([
+                                   'set-sub-availability',
+                                   'com.example.app.plan.monthly',
+                                   'USA',
+                                   '--yes'
+                                 ])
+
+        expect { cli.run }.to output(/Availability updated!/).to_stdout
+      end
+
+      it 'lists subscription price points' do
+        stub_subscription(product_id: 'com.example.app.plan.monthly', sub_id: 'sub1')
+        stub_api_get(
+          '/subscriptions/sub1/pricePoints?filter[territory]=USA&include=territory',
+          response_body: {
+            data: [
+              {
+                id: 'price_point_1',
+                type: 'subscriptionPricePoints',
+                attributes: { customerPrice: '4.99', proceeds: '3.50' }
+              }
+            ]
+          }
+        )
+
+        cli = described_class.new(['sub-price-points', 'com.example.app.plan.monthly', 'USA'])
+
+        expect { cli.run }.to output(/price_point_1/).to_stdout
+      end
+
+      it 'adds a subscription price' do
+        stub_subscription(product_id: 'com.example.app.plan.monthly', sub_id: 'sub1')
+        stub_api_post(
+          '/subscriptionPrices',
+          response_body: {
+            data: {
+              id: 'price_1',
+              type: 'subscriptionPrices',
+              attributes: { startDate: '2026-03-01' },
+              relationships: {
+                subscriptionPricePoint: {
+                  data: { id: 'price_point_1', type: 'subscriptionPricePoints' }
+                }
+              }
+            }
+          }
+        )
+
+        cli = described_class.new([
+                                   'add-sub-price',
+                                   'com.example.app.plan.monthly',
+                                   'price_point_1',
+                                   '--start-date',
+                                   '2026-03-01'
+                                 ])
+
+        expect { cli.run }.to output(/Subscription price added!/).to_stdout
+      end
+    end
+
     context 'when configuration is missing' do
       before do
         AppStoreConnect.reset_configuration!
@@ -591,7 +677,15 @@ RSpec.describe AppStoreConnect::CLI do
 
   describe 'COMMANDS constant' do
     it 'includes all expected commands' do
-      expected_commands = %w[status review builds apps help testers users territories categories create-sub fix-sub-metadata]
+      expected_commands = %w[
+        status review builds apps help testers users territories categories
+        create-sub fix-sub-metadata
+        sub-availability set-sub-availability sub-price-points sub-prices add-sub-price
+        sub-image upload-sub-image delete-sub-image
+        sub-review-screenshot upload-sub-review-screenshot delete-sub-review-screenshot
+        set-sub-tax-category sub-localizations update-sub-localization
+        sub-intro-offers delete-sub-intro-offer
+      ]
 
       expected_commands.each do |cmd|
         expect(described_class::COMMANDS).to include(cmd)
@@ -605,5 +699,32 @@ RSpec.describe AppStoreConnect::CLI do
     yield
   ensure
     $stdin = original_stdin
+  end
+
+  def stub_subscription(product_id:, sub_id:, name: 'Monthly Plan')
+    stub_api_get(
+      '/apps/123456789/subscriptionGroups',
+      response_body: {
+        data: [
+          { id: 'group1', type: 'subscriptionGroups', attributes: { referenceName: 'Plans' } }
+        ]
+      }
+    )
+    stub_api_get(
+      '/subscriptionGroups/group1/subscriptions',
+      response_body: {
+        data: [
+          {
+            id: sub_id,
+            type: 'subscriptions',
+            attributes: {
+              productId: product_id,
+              name: name,
+              state: 'READY_TO_SUBMIT'
+            }
+          }
+        ]
+      }
+    )
   end
 end

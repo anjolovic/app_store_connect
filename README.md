@@ -171,6 +171,40 @@ asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m \
   --localizations-file ./config/subscription_localizations.yml
 ```
 
+### Subscription Management
+
+```bash
+# Availability (territories)
+asc sub-availability com.example.app.plan.monthly
+asc set-sub-availability com.example.app.plan.monthly USA CAN GBR
+
+# Price points and schedule
+asc sub-price-points com.example.app.plan.monthly USA
+asc sub-prices com.example.app.plan.monthly
+asc add-sub-price com.example.app.plan.monthly PRICE_POINT_ID --start-date 2026-03-01
+
+# Subscription image (1024x1024)
+asc sub-image com.example.app.plan.monthly
+asc upload-sub-image com.example.app.plan.monthly ./subscription.png
+asc delete-sub-image com.example.app.plan.monthly
+
+# Review screenshot
+asc sub-review-screenshot com.example.app.plan.monthly
+asc upload-sub-review-screenshot com.example.app.plan.monthly ./review.png
+asc delete-sub-review-screenshot com.example.app.plan.monthly
+
+# Localizations
+asc sub-localizations com.example.app.plan.monthly
+asc update-sub-localization com.example.app.plan.monthly en-US --name "Monthly Plan" --description "Access premium features"
+
+# Introductory offers
+asc sub-intro-offers com.example.app.plan.monthly
+asc delete-sub-intro-offer OFFER_ID
+
+# Tax category
+asc set-sub-tax-category com.example.app.plan.monthly TAX_CATEGORY_ID
+```
+
 ### Responding to Apple Review Requests
 
 ```bash
@@ -440,6 +474,10 @@ client.create_customer_review_response(
 | `review_submissions` | List review submissions |
 | `subscriptions` | List subscription products |
 | `subscription_localizations` | Get subscription localizations |
+| `subscription_availability` | Get subscription availability |
+| `subscription_images` | Get subscription images |
+| `subscription_review_screenshot` | Get subscription review screenshot |
+| `subscription_introductory_offers` | List subscription intro offers |
 | `subscription_prices` | Get subscription prices |
 | `builds` | List recent builds |
 | `app_store_version_localizations` | Get version localizations |
@@ -494,6 +532,14 @@ client.create_customer_review_response(
 | `create_subscription_group` | Create a subscription group |
 | `create_subscription_price` | Set a subscription price |
 | `create_subscription_introductory_offer` | Create an introductory offer |
+| `create_subscription_availability` | Create subscription availability |
+| `update_subscription_availability` | Update subscription availability |
+| `upload_subscription_image` | Upload subscription image |
+| `delete_subscription_image` | Delete subscription image |
+| `upload_subscription_review_screenshot` | Upload subscription review screenshot |
+| `delete_subscription_review_screenshot` | Delete subscription review screenshot |
+| `update_subscription_tax_category` | Update subscription tax category |
+| `delete_subscription_introductory_offer` | Delete subscription intro offer |
 | `update_app_store_version_localization` | Update version metadata |
 | `update_app_store_review_detail` | Update reviewer notes |
 | `update_beta_app_review_detail` | Update TestFlight notes |

@@ -759,6 +759,522 @@ module AppStoreConnect
         puts "\e[31mError: #{e.message}\e[0m"
       end
 
+      def cmd_sub_availability
+        if @options.empty?
+          puts "\e[31mUsage: asc sub-availability <product_id>\e[0m"
+          exit 1
+        end
+
+        product_id = @options.first
+        sub = find_subscription_by_product_id!(product_id)
+
+        availability = client.subscription_availability(subscription_id: sub['id'])
+        unless availability
+          puts "\e[33mNo availability configured for #{product_id}.\e[0m"
+          puts "Use 'asc set-sub-availability #{product_id} USA' to set territories."
+          return
+        end
+
+        puts "\e[1mSubscription Availability\e[0m"
+        puts '=' * 50
+        puts "  Product ID: #{product_id}"
+        puts "  Availability ID: #{availability[:id]}"
+        if availability[:available_in_new_territories].nil?
+          puts '  Available In New Territories: (not set)'
+        else
+          puts "  Available In New Territories: #{availability[:available_in_new_territories]}"
+        end
+
+        territories = availability[:territories] || []
+        if territories.empty?
+          puts '  Territories: (none)'
+        else
+          puts "  Territories (#{territories.length}):"
+          territories.each do |territory|
+            label = territory[:currency] ? "#{territory[:id]} (#{territory[:currency]})" : territory[:id]
+            puts "    - #{label}"
+          end
+        end
+      end
+
+      def cmd_set_sub_availability
+        if @options.empty?
+          puts "\e[31mUsage: asc set-sub-availability <product_id> <territories...> [--all] [--yes] [--dry-run]\e[0m"
+          puts 'Example: asc set-sub-availability com.example.app.plan.monthly USA CAN GBR'
+          puts 'Example: asc set-sub-availability com.example.app.plan.monthly --all'
+          exit 1
+        end
+
+        args = @options.dup
+        product_id = args.shift
+        all = args.delete('--all')
+        dry_run = args.delete('--dry-run')
+        no_confirm = args.delete('--yes') || args.delete('--no-confirm')
+        territories = args.map { |t| t.strip.upcase }.reject(&:empty?)
+
+        if !all && territories.empty?
+          puts "\e[31mPlease specify territories or use --all.\e[0m"
+          exit 1
+        end
+
+        sub = find_subscription_by_product_id!(product_id)
+
+        territory_ids =
+          if all
+            client.territories.map { |t| t[:id] }
+          else
+            territories
+          end
+
+        availability = client.subscription_availability(subscription_id: sub['id'])
+        availability_id = availability&.dig(:id)
+
+        puts "\e[1mSet Subscription Availability\e[0m"
+        puts '=' * 50
+        puts "  Product ID: #{product_id}"
+        puts "  Territories: #{territory_ids.join(', ')}"
+
+        if dry_run
+          puts "\e[33mDry run: no changes made.\e[0m"
+          return
+        end
+
+        unless no_confirm
+          print "\e[33mProceed? (y/N): \e[0m"
+          confirm = $stdin.gets&.strip&.downcase
+          return unless confirm == 'y'
+        end
+
+        if availability_id
+          client.update_subscription_availability(
+            availability_id: availability_id,
+            territory_ids: territory_ids
+          )
+        else
+          client.create_subscription_availability(
+            subscription_id: sub['id'],
+            territory_ids: territory_ids
+          )
+        end
+
+        puts "\e[32mAvailability updated!\e[0m"
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_sub_price_points
+        if @options.empty?
+          puts "\e[31mUsage: asc sub-price-points <product_id> [territory]\e[0m"
+          puts 'Example: asc sub-price-points com.example.app.plan.monthly USA'
+          exit 1
+        end
+
+        product_id = @options[0]
+        territory = @options[1] || 'USA'
+
+        sub = find_subscription_by_product_id!(product_id)
+        points = client.subscription_price_points(subscription_id: sub['id'], territory: territory)
+
+        puts "\e[1mSubscription Price Points (#{territory})\e[0m"
+        puts '=' * 50
+        points.each do |point|
+          attrs = point['attributes'] || {}
+          price = attrs['customerPrice'] || attrs['price']
+          proceeds = attrs['proceeds']
+          label = [price, proceeds].compact.join(' / ')
+          label = "(#{label})" unless label.empty?
+          puts "  - #{point['id']} #{label}"
+        end
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_sub_prices
+        if @options.empty?
+          puts "\e[31mUsage: asc sub-prices <product_id>\e[0m"
+          exit 1
+        end
+
+        product_id = @options.first
+        sub = find_subscription_by_product_id!(product_id)
+        prices = client.subscription_prices(subscription_id: sub['id'])
+
+        puts "\e[1mSubscription Price Schedule\e[0m"
+        puts '=' * 50
+
+        if prices.empty?
+          puts 'No subscription prices configured.'
+          return
+        end
+
+        prices.sort_by { |p| p[:start_date] || '' }.each do |price|
+          start_date = price[:start_date] || 'immediate'
+          preserved = price[:preserved] ? 'preserved' : 'standard'
+          puts "  - #{price[:price_point_id]} (start #{start_date}, #{preserved})"
+        end
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_add_sub_price
+        if @options.empty?
+          puts "\e[31mUsage: asc add-sub-price <product_id> <price_point_id> [--start-date YYYY-MM-DD]\e[0m"
+          exit 1
+        end
+
+        args = @options.dup
+        product_id = args.shift
+        price_point_id = args.shift
+        start_date = nil
+
+        while args.any?
+          arg = args.shift
+          case arg
+          when '--start-date'
+            start_date = args.shift
+          else
+            puts "\e[31mUnknown argument: #{arg}\e[0m"
+            exit 1
+          end
+        end
+
+        if start_date
+          begin
+            start_date = Date.iso8601(start_date).strftime('%Y-%m-%d')
+          rescue ArgumentError
+            puts "\e[31mInvalid --start-date. Use YYYY-MM-DD.\e[0m"
+            exit 1
+          end
+        end
+
+        sub = find_subscription_by_product_id!(product_id)
+        result = client.create_subscription_price(
+          subscription_id: sub['id'],
+          subscription_price_point_id: price_point_id,
+          start_date: start_date
+        )
+
+        puts "\e[32mSubscription price added!\e[0m"
+        puts "  ID: #{result[:id]}"
+        puts "  Price Point: #{result[:price_point_id]}"
+        puts "  Start Date: #{result[:start_date] || 'immediate'}"
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_sub_image
+        if @options.empty?
+          puts "\e[31mUsage: asc sub-image <product_id>\e[0m"
+          exit 1
+        end
+
+        product_id = @options.first
+        sub = find_subscription_by_product_id!(product_id)
+        images = client.subscription_images(subscription_id: sub['id'])
+
+        if images.empty?
+          puts "\e[33mNo subscription images found for #{product_id}.\e[0m"
+          return
+        end
+
+        puts "\e[1mSubscription Images\e[0m"
+        puts '=' * 50
+        images.each do |image|
+          puts "  ID: #{image[:id]}"
+          puts "    File: #{image[:file_name]} (#{image[:file_size]} bytes)"
+          puts "    State: #{image[:upload_state]}"
+        end
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_upload_sub_image
+        if @options.length < 2
+          puts "\e[31mUsage: asc upload-sub-image <product_id> <file_path>\e[0m"
+          exit 1
+        end
+
+        product_id = @options[0]
+        file_path = @options[1]
+        sub = find_subscription_by_product_id!(product_id)
+
+        images = client.subscription_images(subscription_id: sub['id'])
+        if images.any?
+          puts "\e[33mThis subscription already has #{images.length} image(s).\e[0m"
+          print "\e[33mReplace existing image(s)? (y/N): \e[0m"
+          confirm = $stdin.gets&.strip&.downcase
+          return unless confirm == 'y'
+
+          images.each { |image| client.delete_subscription_image(image_id: image[:id]) }
+        end
+
+        puts 'Uploading subscription image...'
+        result = client.upload_subscription_image(subscription_id: sub['id'], file_path: file_path)
+        puts "\e[32mSubscription image uploaded!\e[0m"
+        puts "  Image ID: #{result['data']['id']}"
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_delete_sub_image
+        if @options.empty?
+          puts "\e[31mUsage: asc delete-sub-image <product_id>\e[0m"
+          exit 1
+        end
+
+        product_id = @options.first
+        sub = find_subscription_by_product_id!(product_id)
+        images = client.subscription_images(subscription_id: sub['id'])
+
+        if images.empty?
+          puts "\e[33mNo subscription images found for #{product_id}.\e[0m"
+          return
+        end
+
+        print "\e[33mDelete #{images.length} image(s) for #{product_id}? (y/N): \e[0m"
+        confirm = $stdin.gets&.strip&.downcase
+        return unless confirm == 'y'
+
+        images.each { |image| client.delete_subscription_image(image_id: image[:id]) }
+        puts "\e[32mSubscription images deleted.\e[0m"
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_sub_review_screenshot
+        if @options.empty?
+          puts "\e[31mUsage: asc sub-review-screenshot <product_id>\e[0m"
+          exit 1
+        end
+
+        product_id = @options.first
+        sub = find_subscription_by_product_id!(product_id)
+        screenshot = client.subscription_review_screenshot(subscription_id: sub['id'])
+
+        unless screenshot
+          puts "\e[33mNo review screenshot found for #{product_id}.\e[0m"
+          return
+        end
+
+        puts "\e[1mSubscription Review Screenshot\e[0m"
+        puts '=' * 50
+        puts "  ID: #{screenshot[:id]}"
+        puts "  File: #{screenshot[:file_name]} (#{screenshot[:file_size]} bytes)"
+        puts "  State: #{screenshot[:upload_state]}"
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_upload_sub_review_screenshot
+        if @options.length < 2
+          puts "\e[31mUsage: asc upload-sub-review-screenshot <product_id> <file_path>\e[0m"
+          exit 1
+        end
+
+        product_id = @options[0]
+        file_path = @options[1]
+        sub = find_subscription_by_product_id!(product_id)
+
+        existing = client.subscription_review_screenshot(subscription_id: sub['id'])
+        if existing
+          puts "\e[33mThis subscription already has a review screenshot.\e[0m"
+          print "\e[33mReplace existing screenshot? (y/N): \e[0m"
+          confirm = $stdin.gets&.strip&.downcase
+          return unless confirm == 'y'
+
+          client.delete_subscription_review_screenshot(screenshot_id: existing[:id])
+          puts "\e[32mDeleted existing review screenshot.\e[0m"
+        end
+
+        puts 'Uploading review screenshot...'
+        result = client.upload_subscription_review_screenshot(subscription_id: sub['id'], file_path: file_path)
+        puts "\e[32mReview screenshot uploaded!\e[0m"
+        puts "  Screenshot ID: #{result['data']['id']}"
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_delete_sub_review_screenshot
+        if @options.empty?
+          puts "\e[31mUsage: asc delete-sub-review-screenshot <product_id>\e[0m"
+          exit 1
+        end
+
+        product_id = @options.first
+        sub = find_subscription_by_product_id!(product_id)
+        screenshot = client.subscription_review_screenshot(subscription_id: sub['id'])
+
+        unless screenshot
+          puts "\e[33mNo review screenshot found for #{product_id}.\e[0m"
+          return
+        end
+
+        print "\e[33mDelete review screenshot for #{product_id}? (y/N): \e[0m"
+        confirm = $stdin.gets&.strip&.downcase
+        return unless confirm == 'y'
+
+        client.delete_subscription_review_screenshot(screenshot_id: screenshot[:id])
+        puts "\e[32mReview screenshot deleted.\e[0m"
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_set_sub_tax_category
+        if @options.length < 2
+          puts "\e[31mUsage: asc set-sub-tax-category <product_id> <tax_category_id>\e[0m"
+          exit 1
+        end
+
+        product_id = @options[0]
+        tax_category_id = @options[1]
+        sub = find_subscription_by_product_id!(product_id)
+
+        print "\e[33mSet tax category for #{product_id} to #{tax_category_id}? (y/N): \e[0m"
+        confirm = $stdin.gets&.strip&.downcase
+        return unless confirm == 'y'
+
+        client.update_subscription_tax_category(subscription_id: sub['id'], tax_category_id: tax_category_id)
+        puts "\e[32mTax category updated.\e[0m"
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_sub_localizations
+        if @options.empty?
+          puts "\e[31mUsage: asc sub-localizations <product_id>\e[0m"
+          exit 1
+        end
+
+        product_id = @options.first
+        sub = find_subscription_by_product_id!(product_id)
+        locs = client.subscription_localizations(subscription_id: sub['id'])
+
+        if locs.empty?
+          puts "\e[33mNo localizations found for #{product_id}.\e[0m"
+          return
+        end
+
+        puts "\e[1mSubscription Localizations\e[0m"
+        puts '=' * 50
+        locs.each do |loc|
+          puts "  #{loc[:locale]}: #{loc[:name]}"
+          puts "    Description: #{loc[:description] || '(none)'}"
+        end
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_update_sub_localization
+        if @options.length < 2
+          puts "\e[31mUsage: asc update-sub-localization <product_id> <locale> [--name \"Name\"] [--description \"Desc\"] [--create]\e[0m"
+          exit 1
+        end
+
+        args = @options.dup
+        product_id = args.shift
+        locale = args.shift
+        name = nil
+        description = nil
+        create = false
+
+        while args.any?
+          arg = args.shift
+          case arg
+          when '--name'
+            name = args.shift
+          when '--description'
+            description = args.shift
+          when '--create'
+            create = true
+          else
+            puts "\e[31mUnknown argument: #{arg}\e[0m"
+            exit 1
+          end
+        end
+
+        if name.nil? && description.nil?
+          puts "\e[31mProvide --name and/or --description.\e[0m"
+          exit 1
+        end
+
+        sub = find_subscription_by_product_id!(product_id)
+        locs = client.subscription_localizations(subscription_id: sub['id'])
+        loc = locs.find { |l| l[:locale].casecmp?(locale) }
+
+        if loc
+          client.update_subscription_localization(
+            localization_id: loc[:id],
+            name: name,
+            description: description
+          )
+          puts "\e[32mLocalization updated.\e[0m"
+        elsif create
+          if name.nil?
+            puts "\e[31m--name is required when creating a localization.\e[0m"
+            exit 1
+          end
+          client.create_subscription_localization(
+            subscription_id: sub['id'],
+            locale: locale,
+            name: name,
+            description: description
+          )
+          puts "\e[32mLocalization created.\e[0m"
+        else
+          puts "\e[31mLocalization not found for #{locale}. Use --create to add it.\e[0m"
+          exit 1
+        end
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_sub_intro_offers
+        if @options.empty?
+          puts "\e[31mUsage: asc sub-intro-offers <product_id>\e[0m"
+          exit 1
+        end
+
+        product_id = @options.first
+        sub = find_subscription_by_product_id!(product_id)
+        offers = client.subscription_introductory_offers(subscription_id: sub['id'])
+
+        if offers.empty?
+          puts "\e[33mNo introductory offers found for #{product_id}.\e[0m"
+          return
+        end
+
+        puts "\e[1mSubscription Introductory Offers\e[0m"
+        puts '=' * 50
+        offers.each do |offer|
+          puts "  ID: #{offer[:id]}"
+          puts "    Mode: #{offer[:offer_mode]}"
+          puts "    Duration: #{offer[:duration]}"
+          puts "    Periods: #{offer[:number_of_periods]}" if offer[:number_of_periods]
+          puts "    Start: #{offer[:start_date]}" if offer[:start_date]
+          puts "    End: #{offer[:end_date]}" if offer[:end_date]
+          puts "    Price Point: #{offer[:price_point_id]}" if offer[:price_point_id]
+        end
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_delete_sub_intro_offer
+        if @options.empty?
+          puts "\e[31mUsage: asc delete-sub-intro-offer <offer_id>\e[0m"
+          exit 1
+        end
+
+        offer_id = @options.first
+        print "\e[33mDelete introductory offer #{offer_id}? (y/N): \e[0m"
+        confirm = $stdin.gets&.strip&.downcase
+        return unless confirm == 'y'
+
+        client.delete_subscription_introductory_offer(offer_id: offer_id)
+        puts "\e[32mIntroductory offer deleted.\e[0m"
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
       def cmd_subscriptions
         puts "\e[1mSubscription Products\e[0m"
         puts '=' * 50
@@ -1043,6 +1559,23 @@ module AppStoreConnect
         groups.each do |group|
           puts "  - #{subscription_group_label(group)} (#{group['id']})"
         end
+      end
+
+      def find_subscription_by_product_id!(product_id)
+        subs = client.subscriptions
+        sub = subs.find { |s| s.dig('attributes', 'productId') == product_id }
+
+        unless sub
+          puts "\e[31mSubscription not found: #{product_id}\e[0m"
+          puts
+          puts 'Available subscriptions:'
+          subs.each do |s|
+            puts "  - #{s.dig('attributes', 'productId')}"
+          end
+          exit 1
+        end
+
+        sub
       end
 
       def parse_localization_arg(value)

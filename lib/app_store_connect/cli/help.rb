@@ -21,6 +21,13 @@ module AppStoreConnect
             review-info       Show review contact info and notes
             subs              List subscription products
             sub-details       Detailed subscription info with localizations
+            sub-availability  Show subscription availability territories
+            sub-price-points  List subscription price points for territory
+            sub-prices        Show subscription price schedule
+            sub-image         Show subscription image
+            sub-review-screenshot  Show subscription review screenshot
+            sub-localizations List subscription localizations
+            sub-intro-offers  List subscription introductory offers
             iaps              List in-app purchases
             iap-details       Detailed IAP info with localizations
             version-info      Show version localizations (description, what's new)
@@ -53,6 +60,15 @@ module AppStoreConnect
             update-sub-description <id> "desc"    Update subscription description
             update-sub-note <id> "note"           Update subscription review note
             fix-sub-metadata <id> [options]       Add missing subscription metadata
+            set-sub-availability <id> <territories...>  Set subscription availability
+            add-sub-price <id> <price_point_id>   Add subscription price schedule
+            upload-sub-image <id> <file>          Upload subscription image (1024x1024)
+            delete-sub-image <id>                 Delete subscription image
+            upload-sub-review-screenshot <id> <file> Upload subscription review screenshot
+            delete-sub-review-screenshot <id>     Delete subscription review screenshot
+            set-sub-tax-category <id> <tax_id>    Update subscription tax category
+            update-sub-localization <id> <locale> Update or create localization
+            delete-sub-intro-offer <offer_id>     Delete introductory offer
             delete-sub <product_id>               Delete a draft subscription
             update-iap-note <id> "note"           Update IAP review notes
             update-iap-description <id> "desc"    Update IAP description
@@ -67,6 +83,10 @@ module AppStoreConnect
             upload-screenshot <type> <locale> <file>  Upload app screenshot
             upload-screenshots <locale> <dir>    Batch upload from directory
             delete-screenshot <id>                Delete app screenshot
+            upload-sub-image <id> <file>          Upload subscription image
+            delete-sub-image <id>                 Delete subscription image
+            upload-sub-review-screenshot <id> <file> Upload subscription review screenshot
+            delete-sub-review-screenshot <id>     Delete subscription review screenshot
 
           \e[1mRELEASE AUTOMATION:\e[0m
             create-version <version> [type]       Create new app version
@@ -201,6 +221,15 @@ module AppStoreConnect
 
             # Fix subscription metadata (localization + price):
             asc fix-sub-metadata com.example.app.plan.starter.monthly --display-name "Starter Monthly" --description "Access basic features" --price-point PRICE_POINT_ID
+
+            # Set availability and pricing:
+            asc set-sub-availability com.example.app.plan.starter.monthly USA CAN GBR
+            asc sub-price-points com.example.app.plan.starter.monthly USA
+            asc add-sub-price com.example.app.plan.starter.monthly PRICE_POINT_ID --start-date 2026-03-01
+
+            # Subscription assets:
+            asc upload-sub-image com.example.app.plan.starter.monthly ~/Desktop/subscription.png
+            asc upload-sub-review-screenshot com.example.app.plan.starter.monthly ~/Desktop/review.png
 
             # Create subscription with price + intro offer:
             asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m --group "Main Plans" --create-group --price-point PRICE_POINT_ID --intro-offer FREE_TRIAL --intro-duration 1w --intro-price-point INTRO_PRICE_POINT_ID

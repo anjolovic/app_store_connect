@@ -79,6 +79,232 @@ module AppStoreConnect
         }
       end
 
+      # Get subscription availability (territories)
+      def subscription_availability(subscription_id:)
+        result = get("/subscriptions/#{subscription_id}/subscriptionAvailability?include=availableTerritories")
+        availability = result['data']
+        return nil unless availability
+
+        territories = (result['included'] || []).select { |item| item['type'] == 'territories' }.map do |territory|
+          {
+            id: territory['id'],
+            currency: territory.dig('attributes', 'currency')
+          }
+        end
+
+        {
+          id: availability['id'],
+          available_in_new_territories: availability.dig('attributes', 'availableInNewTerritories'),
+          territories: territories
+        }
+      rescue ApiError => e
+        return nil if e.message.include?('Not found')
+
+        raise
+      end
+
+      # Create subscription availability
+      def create_subscription_availability(subscription_id:, territory_ids: [])
+        body = {
+          data: {
+            type: 'subscriptionAvailabilities',
+            relationships: {
+              subscription: {
+                data: { type: 'subscriptions', id: subscription_id }
+              },
+              availableTerritories: {
+                data: territory_ids.map { |id| { type: 'territories', id: id } }
+              }
+            }
+          }
+        }
+
+        result = post('/subscriptionAvailabilities', body: body)['data']
+        {
+          id: result['id']
+        }
+      end
+
+      # Update subscription availability territories
+      def update_subscription_availability(availability_id:, territory_ids:)
+        patch("/subscriptionAvailabilities/#{availability_id}/relationships/availableTerritories", body: {
+                data: territory_ids.map { |id| { type: 'territories', id: id } }
+              })
+      end
+
+      # List subscription introductory offers
+      def subscription_introductory_offers(subscription_id:)
+        get("/subscriptions/#{subscription_id}/subscriptionIntroductoryOffers")['data'].map do |offer|
+          {
+            id: offer['id'],
+            offer_mode: offer.dig('attributes', 'offerMode'),
+            duration: offer.dig('attributes', 'duration'),
+            number_of_periods: offer.dig('attributes', 'numberOfPeriods'),
+            start_date: offer.dig('attributes', 'startDate'),
+            end_date: offer.dig('attributes', 'endDate'),
+            price_point_id: offer.dig('relationships', 'subscriptionPricePoint', 'data', 'id')
+          }
+        end
+      end
+
+      # Delete a subscription introductory offer
+      def delete_subscription_introductory_offer(offer_id:)
+        delete("/subscriptionIntroductoryOffers/#{offer_id}")
+      end
+
+      # Get subscription images
+      def subscription_images(subscription_id:)
+        get("/subscriptions/#{subscription_id}/subscriptionImages")['data'].map do |image|
+          {
+            id: image['id'],
+            file_name: image.dig('attributes', 'fileName'),
+            file_size: image.dig('attributes', 'fileSize'),
+            upload_state: image.dig('attributes', 'assetDeliveryState', 'state'),
+            source_file_checksum: image.dig('attributes', 'sourceFileChecksum')
+          }
+        end
+      end
+
+      # Upload a subscription image (1024x1024)
+      def upload_subscription_image(subscription_id:, file_path:)
+        file_name = File.basename(file_path)
+        file_size = File.size(file_path)
+        checksum = Digest::MD5.file(file_path).base64digest
+
+        reservation = post('/subscriptionImages', body: {
+                             data: {
+                               type: 'subscriptionImages',
+                               attributes: {
+                                 fileName: file_name,
+                                 fileSize: file_size,
+                                 sourceFileChecksum: checksum
+                               },
+                               relationships: {
+                                 subscription: {
+                                   data: {
+                                     type: 'subscriptions',
+                                     id: subscription_id
+                                   }
+                                 }
+                               }
+                             }
+                           })
+
+        image_id = reservation['data']['id']
+        upload_operations = reservation['data'].dig('attributes', 'uploadOperations')
+
+        file_data = File.binread(file_path)
+        upload_operations&.each do |operation|
+          upload_part(
+            url: operation['url'],
+            data: file_data[operation['offset'], operation['length']],
+            headers: operation['requestHeaders']
+          )
+        end
+
+        patch("/subscriptionImages/#{image_id}", body: {
+                data: {
+                  type: 'subscriptionImages',
+                  id: image_id,
+                  attributes: {
+                    uploaded: true,
+                    sourceFileChecksum: checksum
+                  }
+                }
+              })
+
+        reservation
+      end
+
+      # Delete a subscription image
+      def delete_subscription_image(image_id:)
+        delete("/subscriptionImages/#{image_id}")
+      end
+
+      # Get subscription App Store review screenshot
+      def subscription_review_screenshot(subscription_id:)
+        result = get("/subscriptions/#{subscription_id}/appStoreReviewScreenshot")['data']
+        return nil unless result
+
+        {
+          id: result['id'],
+          file_name: result.dig('attributes', 'fileName'),
+          file_size: result.dig('attributes', 'fileSize'),
+          upload_state: result.dig('attributes', 'assetDeliveryState', 'state'),
+          source_file_checksum: result.dig('attributes', 'sourceFileChecksum')
+        }
+      rescue ApiError => e
+        return nil if e.message.include?('Not found')
+
+        raise
+      end
+
+      # Upload a subscription App Store review screenshot
+      def upload_subscription_review_screenshot(subscription_id:, file_path:)
+        file_name = File.basename(file_path)
+        file_size = File.size(file_path)
+        checksum = Digest::MD5.file(file_path).base64digest
+
+        reservation = post('/subscriptionAppStoreReviewScreenshots', body: {
+                             data: {
+                               type: 'subscriptionAppStoreReviewScreenshots',
+                               attributes: {
+                                 fileName: file_name,
+                                 fileSize: file_size,
+                                 sourceFileChecksum: checksum
+                               },
+                               relationships: {
+                                 subscription: {
+                                   data: {
+                                     type: 'subscriptions',
+                                     id: subscription_id
+                                   }
+                                 }
+                               }
+                             }
+                           })
+
+        screenshot_id = reservation['data']['id']
+        upload_operations = reservation['data'].dig('attributes', 'uploadOperations')
+
+        file_data = File.binread(file_path)
+        upload_operations&.each do |operation|
+          upload_part(
+            url: operation['url'],
+            data: file_data[operation['offset'], operation['length']],
+            headers: operation['requestHeaders']
+          )
+        end
+
+        patch("/subscriptionAppStoreReviewScreenshots/#{screenshot_id}", body: {
+                data: {
+                  type: 'subscriptionAppStoreReviewScreenshots',
+                  id: screenshot_id,
+                  attributes: {
+                    uploaded: true,
+                    sourceFileChecksum: checksum
+                  }
+                }
+              })
+
+        reservation
+      end
+
+      # Delete a subscription App Store review screenshot
+      def delete_subscription_review_screenshot(screenshot_id:)
+        delete("/subscriptionAppStoreReviewScreenshots/#{screenshot_id}")
+      end
+
+      # Update subscription tax category
+      def update_subscription_tax_category(subscription_id:, tax_category_id:)
+        patch("/subscriptions/#{subscription_id}/relationships/taxCategory", body: {
+                data: {
+                  type: 'taxCategories',
+                  id: tax_category_id
+                }
+              })
+      end
+
       # Create an introductory offer for a subscription
       def create_subscription_introductory_offer(subscription_id:, offer_mode:, duration:, subscription_price_point_id:)
         body = {
