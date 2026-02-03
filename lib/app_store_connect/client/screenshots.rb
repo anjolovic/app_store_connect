@@ -130,6 +130,7 @@ module AppStoreConnect
 
         http = Net::HTTP.new(uri.host, uri.port)
         http.use_ssl = true
+        configure_upload_ssl(http)
 
         request = Net::HTTP::Put.new(uri)
         headers.each { |h| request[h['name']] = h['value'] }
@@ -139,6 +140,28 @@ module AppStoreConnect
         raise ApiError, "Upload failed: #{response.code}" unless response.is_a?(Net::HTTPSuccess)
 
         response
+      end
+
+      def configure_upload_ssl(http)
+        if @verify_ssl
+          http.verify_mode = OpenSSL::SSL::VERIFY_PEER
+
+          if @skip_crl_verification
+            store = OpenSSL::X509::Store.new
+            store.set_default_paths
+
+            http.verify_callback = lambda { |preverify_ok, store_context|
+              return true if preverify_ok
+
+              error_code = store_context.error
+              HttpClient::CRL_ERROR_CODES.include?(error_code)
+            }
+
+            http.cert_store = store
+          end
+        else
+          http.verify_mode = OpenSSL::SSL::VERIFY_NONE
+        end
       end
     end
   end

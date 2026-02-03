@@ -94,6 +94,9 @@ module AppStoreConnect
         use_curl: curl
       )
 
+      @skip_crl_verification = skip_crl
+      @verify_ssl = verify
+
       # Initialize session for IRIS API (Resolution Center)
       @session = Session.new
 

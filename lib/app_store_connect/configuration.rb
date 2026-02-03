@@ -14,9 +14,9 @@ module AppStoreConnect
       @bundle_id = ENV.fetch('APP_STORE_CONNECT_BUNDLE_ID', nil)
 
       # SSL configuration - defaults handle CRL issues with Apple certificates
-      @skip_crl_verification = true  # Skip CRL checks that often fail with Apple
-      @verify_ssl = true             # Still verify SSL certificates
-      @use_curl = false              # Use Net::HTTP by default, curl as fallback
+      @skip_crl_verification = bool_env('APP_STORE_CONNECT_SKIP_CRL_VERIFICATION', default: true)
+      @verify_ssl = bool_env('APP_STORE_CONNECT_VERIFY_SSL', default: true)
+      @use_curl = bool_env('APP_STORE_CONNECT_USE_CURL', default: false)
     end
 
     def valid?
@@ -35,6 +35,20 @@ module AppStoreConnect
 
     def blank?(value)
       value.nil? || (value.respond_to?(:empty?) && value.empty?)
+    end
+
+    def bool_env(key, default:)
+      value = ENV[key]
+      return default if value.nil? || value.strip.empty?
+
+      case value.strip.downcase
+      when 'true', '1', 'yes', 'y'
+        true
+      when 'false', '0', 'no', 'n'
+        false
+      else
+        default
+      end
     end
   end
 end

@@ -56,6 +56,19 @@ export APP_STORE_CONNECT_APP_ID=YOUR_APP_ID
 export APP_STORE_CONNECT_BUNDLE_ID=com.example.app
 ```
 
+Optional SSL settings (use only if your environment has TLS/CRL issues):
+
+```bash
+# Disable CRL verification (default: true)
+export APP_STORE_CONNECT_SKIP_CRL_VERIFICATION=true
+
+# Disable SSL verification entirely (default: true; set false only if needed)
+export APP_STORE_CONNECT_VERIFY_SSL=false
+
+# Use curl-based HTTP client (default: false)
+export APP_STORE_CONNECT_USE_CURL=true
+```
+
 Or in a Rails initializer:
 
 ```ruby
