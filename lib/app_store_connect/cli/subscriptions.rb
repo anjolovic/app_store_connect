@@ -1552,6 +1552,7 @@ module AppStoreConnect
           puts
 
           # Get localizations
+          locs = []
           begin
             locs = client.subscription_localizations(subscription_id: sub_id)
             if locs.any?
@@ -1565,6 +1566,14 @@ module AppStoreConnect
             puts "  \e[33mCould not fetch localizations: #{e.message}\e[0m"
           end
           puts
+
+          if attrs['state'] == 'MISSING_METADATA'
+            puts "  \e[1mMetadata Status:\e[0m"
+            subscription_metadata_status(sub_id, localizations: locs).each do |line|
+              puts "    #{line}"
+            end
+            puts
+          end
         end
       end
 
@@ -1982,6 +1991,90 @@ module AppStoreConnect
         file_path
       rescue Errno::ENOENT
         raise 'xcrun not found. Install Xcode command line tools.'
+      end
+
+      def subscription_metadata_status(subscription_id, localizations: nil)
+        lines = []
+
+        locs = localizations
+        if locs.nil?
+          begin
+            locs = client.subscription_localizations(subscription_id: subscription_id)
+          rescue ApiError
+            locs = []
+            lines << 'Localizations: Unknown (API error)'
+          end
+        end
+
+        if locs&.any?
+          lines << "Localizations: OK (#{locs.size})"
+        else
+          lines << 'Localizations: MISSING (use: asc update-sub-localization <product_id> en-US ...)'
+        end
+
+        begin
+          availability = client.subscription_availability(subscription_id: subscription_id)
+          if availability.nil? || availability[:territories].empty?
+            lines << 'Availability: MISSING (use: asc set-sub-availability <product_id> ...)'
+          else
+            new_territories = availability[:available_in_new_territories]
+            detail = "#{availability[:territories].size} territories"
+            detail += ", new territories: #{new_territories.nil? ? 'unset' : new_territories}"
+            lines << "Availability: OK (#{detail})"
+            if new_territories.nil?
+              lines << 'Availability: availableInNewTerritories missing (use: asc set-sub-availability <product_id> --available-in-new-territories true|false)'
+            end
+          end
+        rescue ApiError => e
+          lines << "Availability: Unknown (#{e.message})"
+        end
+
+        begin
+          prices = client.subscription_prices(subscription_id: subscription_id)
+          if prices.empty?
+            lines << 'Price Schedule: MISSING (use: asc add-sub-price <product_id> <price_point_id> ...)'
+          else
+            lines << "Price Schedule: OK (#{prices.size} price(s))"
+          end
+        rescue ApiError => e
+          lines << "Price Schedule: Unknown (#{e.message})"
+        end
+
+        begin
+          screenshot = client.subscription_review_screenshot(subscription_id: subscription_id)
+          if screenshot.nil?
+            lines << 'Review Screenshot: MISSING (use: asc upload-sub-review-screenshot <product_id> <file>)'
+          else
+            lines << "Review Screenshot: OK (#{screenshot[:file_name]})"
+          end
+        rescue ApiError => e
+          lines << "Review Screenshot: Unknown (#{e.message})"
+        end
+
+        begin
+          images = client.subscription_images(subscription_id: subscription_id)
+          if images.empty?
+            lines << 'Image: None (optional unless using offers/promotions)'
+          else
+            lines << "Image: OK (#{images.size} image(s))"
+          end
+        rescue ApiError => e
+          lines << "Image: Unknown (#{e.message})"
+        end
+
+        begin
+          tax_category = client.subscription_tax_category(subscription_id: subscription_id)
+          if tax_category.nil?
+            lines << 'Tax Category: Not set (set in App Store Connect UI if required)'
+          else
+            label = tax_category[:name] || tax_category[:id]
+            lines << "Tax Category: OK (#{label})"
+          end
+        rescue ApiError => e
+          lines << "Tax Category: Unavailable (#{e.message})"
+        end
+
+        lines
       end
     end
   end

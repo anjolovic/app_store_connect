@@ -355,6 +355,22 @@ module AppStoreConnect
         end
       end
 
+      # Get subscription tax category (best-effort; may be unavailable via API)
+      def subscription_tax_category(subscription_id:)
+        result = get("/subscriptions/#{subscription_id}", params: { 'include' => 'taxCategory' })
+        rel = result.dig('data', 'relationships', 'taxCategory', 'data')
+        return nil unless rel && rel['id']
+
+        included = (result['included'] || []).find do |item|
+          item['type'] == 'taxCategories' && item['id'] == rel['id']
+        end
+
+        {
+          id: rel['id'],
+          name: included&.dig('attributes', 'name')
+        }
+      end
+
       # Create an introductory offer for a subscription
       def create_subscription_introductory_offer(subscription_id:, offer_mode:, duration:, subscription_price_point_id:)
         body = {

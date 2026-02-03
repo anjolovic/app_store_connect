@@ -424,6 +424,47 @@ RSpec.describe AppStoreConnect::Client do
     end
   end
 
+  describe '#subscription_tax_category' do
+    it 'returns tax category when present' do
+      stub_api_get(
+        '/subscriptions/sub1?include=taxCategory',
+        response_body: {
+          data: {
+            id: 'sub1',
+            type: 'subscriptions',
+            relationships: {
+              taxCategory: {
+                data: { id: 'tax1', type: 'taxCategories' }
+              }
+            }
+          },
+          included: [
+            { id: 'tax1', type: 'taxCategories', attributes: { name: 'Standard' } }
+          ]
+        }
+      )
+
+      tax = client.subscription_tax_category(subscription_id: 'sub1')
+      expect(tax[:id]).to eq('tax1')
+      expect(tax[:name]).to eq('Standard')
+    end
+
+    it 'returns nil when no tax category is set' do
+      stub_api_get(
+        '/subscriptions/sub1?include=taxCategory',
+        response_body: {
+          data: {
+            id: 'sub1',
+            type: 'subscriptions',
+            relationships: {}
+          }
+        }
+      )
+
+      expect(client.subscription_tax_category(subscription_id: 'sub1')).to be_nil
+    end
+  end
+
   describe '#create_beta_group' do
     let(:new_group_response) do
       {
