@@ -118,6 +118,10 @@ module AppStoreConnect
   # This client uses curl which handles SSL/CRL verification more robustly
   # on some systems. It properly captures HTTP status codes for error handling.
   class CurlHttpClient
+    def initialize(verify_ssl: true)
+      @verify_ssl = verify_ssl
+    end
+
     # Executes an HTTP request using curl
     #
     # @param method [Symbol] HTTP method (:get, :post, :patch, :delete)
@@ -125,31 +129,48 @@ module AppStoreConnect
     # @param headers [Hash] Request headers
     # @param body [Hash, nil] Request body (will be JSON encoded)
     # @return [Hash] Parsed JSON response with :status and :body keys
-    def execute(method:, url:, headers:, body: nil)
+    def execute(method:, url:, headers:, body: nil, raw_body: nil)
       require 'shellwords'
       require 'tempfile'
 
+      if !body.nil? && !raw_body.nil?
+        raise ArgumentError, 'Provide either body (Hash) or raw_body (String), not both.'
+      end
+
       # Use a temp file to capture response body, and -w to get status code
       Tempfile.create('curl_response') do |response_file|
-        curl_cmd = build_curl_command(method, url, headers, body, response_file.path)
-        status_output = `#{curl_cmd.shelljoin}`
-        exit_status = $CHILD_STATUS
+        raw_body_file = nil
+        raw_body_file = Tempfile.new('curl_raw_body') if raw_body
 
-        raise ApiError, "HTTP request failed: curl exit code #{exit_status.exitstatus}" unless exit_status.success?
+        begin
+          if raw_body_file
+            raw_body_file.binmode
+            raw_body_file.write(raw_body)
+            raw_body_file.flush
+          end
 
-        http_status = status_output.strip.to_i
-        response_body = File.read(response_file.path)
+          curl_cmd = build_curl_command(method, url, headers, body, raw_body_file&.path, response_file.path)
+          status_output = `#{curl_cmd.shelljoin}`
+          exit_status = $CHILD_STATUS
 
-        {
-          status: http_status,
-          body: parse_response_body(response_body)
-        }
+          raise ApiError, "HTTP request failed: curl exit code #{exit_status.exitstatus}" unless exit_status.success?
+
+          http_status = status_output.strip.to_i
+          response_body = File.read(response_file.path)
+
+          {
+            status: http_status,
+            body: parse_response_body(response_body)
+          }
+        ensure
+          raw_body_file&.close!
+        end
       end
     end
 
     private
 
-    def build_curl_command(method, url, headers, body, output_file)
+    def build_curl_command(method, url, headers, body, raw_body_file_path, output_file)
       cmd = [
         'curl',
         '-s',           # Silent mode
@@ -159,11 +180,17 @@ module AppStoreConnect
         '-X', method.to_s.upcase
       ]
 
+      cmd << '-k' unless @verify_ssl
+
       headers.each do |key, value|
         cmd += ['-H', "#{key}: #{value}"]
       end
 
-      cmd += ['-d', body.to_json] if body
+      if body
+        cmd += ['-d', body.to_json]
+      elsif raw_body_file_path
+        cmd += ['--data-binary', "@#{raw_body_file_path}"]
+      end
       cmd << url
 
       cmd

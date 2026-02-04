@@ -67,6 +67,12 @@ export APP_STORE_CONNECT_VERIFY_SSL=false
 
 # Use curl-based HTTP client (default: false)
 export APP_STORE_CONNECT_USE_CURL=true
+
+# Retry multipart asset uploads (screenshots/images) on transient failures (default: 3)
+export APP_STORE_CONNECT_UPLOAD_RETRIES=3
+
+# Base sleep seconds between retries (default: 1.0)
+export APP_STORE_CONNECT_UPLOAD_RETRY_SLEEP=1.0
 ```
 
 Or in a Rails initializer:
@@ -209,6 +215,14 @@ asc sub-review-screenshot com.example.app.plan.monthly
 asc upload-sub-review-screenshot com.example.app.plan.monthly ./review.png
 asc upload-sub-review-screenshot com.example.app.plan.monthly --capture --output ./subscription-review.png
 asc delete-sub-review-screenshot com.example.app.plan.monthly
+
+# Ensure assets for all subscriptions (review screenshot + 1024x1024 image)
+asc sub-ensure-assets \
+  --review-screenshot ./paywall.png \
+  --image-file ./subscription-logo-1024.png \
+  --only-missing \
+  --yes \
+  --wait
 
 # Localizations
 asc sub-localizations com.example.app.plan.monthly

@@ -4,7 +4,8 @@ module AppStoreConnect
   class Configuration
     attr_accessor :key_id, :issuer_id, :private_key_path,
                   :app_id, :bundle_id,
-                  :skip_crl_verification, :verify_ssl, :use_curl
+                  :skip_crl_verification, :verify_ssl, :use_curl,
+                  :upload_retries, :upload_retry_sleep
 
     def initialize
       @key_id = ENV.fetch('APP_STORE_CONNECT_KEY_ID', nil)
@@ -17,6 +18,10 @@ module AppStoreConnect
       @skip_crl_verification = bool_env('APP_STORE_CONNECT_SKIP_CRL_VERIFICATION', default: true)
       @verify_ssl = bool_env('APP_STORE_CONNECT_VERIFY_SSL', default: true)
       @use_curl = bool_env('APP_STORE_CONNECT_USE_CURL', default: false)
+
+      # Upload robustness (multipart upload URLs for screenshots/images)
+      @upload_retries = int_env('APP_STORE_CONNECT_UPLOAD_RETRIES', default: 3)
+      @upload_retry_sleep = float_env('APP_STORE_CONNECT_UPLOAD_RETRY_SLEEP', default: 1.0)
     end
 
     def valid?
@@ -49,6 +54,24 @@ module AppStoreConnect
       else
         default
       end
+    end
+
+    def int_env(key, default:)
+      value = ENV[key]
+      return default if value.nil? || value.strip.empty?
+
+      Integer(value, 10)
+    rescue ArgumentError, TypeError
+      default
+    end
+
+    def float_env(key, default:)
+      value = ENV[key]
+      return default if value.nil? || value.strip.empty?
+
+      Float(value)
+    rescue ArgumentError, TypeError
+      default
     end
   end
 end

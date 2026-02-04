@@ -67,6 +67,7 @@ module AppStoreConnect
             update-sub-description <id> "desc"    Update subscription description
             update-sub-note <id> "note"           Update subscription review note
             fix-sub-metadata <id> [options]       Add missing subscription metadata
+            sub-ensure-assets [options]           Upload missing subscription assets for all subs
             set-sub-availability <id> <territories...>  Set subscription availability (requires --available-in-new-territories on first set)
             add-sub-price <id> <price_point_id>   Add subscription price schedule
             upload-sub-image <id> <file>          Upload subscription image (1024x1024)

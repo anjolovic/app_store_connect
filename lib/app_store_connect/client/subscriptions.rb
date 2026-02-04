@@ -181,6 +181,24 @@ module AppStoreConnect
         end
       end
 
+      # Get a specific subscription image by ID
+      def subscription_image(image_id:)
+        image = get("/subscriptionImages/#{image_id}")['data']
+        return nil unless image
+
+        {
+          id: image['id'],
+          file_name: image.dig('attributes', 'fileName'),
+          file_size: image.dig('attributes', 'fileSize'),
+          upload_state: image.dig('attributes', 'assetDeliveryState', 'state'),
+          source_file_checksum: image.dig('attributes', 'sourceFileChecksum')
+        }
+      rescue ApiError => e
+        return nil if e.message.include?('Not found')
+
+        raise
+      end
+
       # Upload a subscription image (1024x1024)
       def upload_subscription_image(subscription_id:, file_path:)
         file_name = File.basename(file_path)
@@ -240,6 +258,24 @@ module AppStoreConnect
       # Get subscription App Store review screenshot
       def subscription_review_screenshot(subscription_id:)
         result = get("/subscriptions/#{subscription_id}/appStoreReviewScreenshot")['data']
+        return nil unless result
+
+        {
+          id: result['id'],
+          file_name: result.dig('attributes', 'fileName'),
+          file_size: result.dig('attributes', 'fileSize'),
+          upload_state: result.dig('attributes', 'assetDeliveryState', 'state'),
+          source_file_checksum: result.dig('attributes', 'sourceFileChecksum')
+        }
+      rescue ApiError => e
+        return nil if e.message.include?('Not found')
+
+        raise
+      end
+
+      # Get a specific subscription App Store review screenshot by ID
+      def subscription_review_screenshot_by_id(screenshot_id:)
+        result = get("/subscriptionAppStoreReviewScreenshots/#{screenshot_id}")['data']
         return nil unless result
 
         {

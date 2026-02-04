@@ -1573,6 +1573,305 @@ module AppStoreConnect
         end
       end
 
+      def cmd_sub_ensure_assets
+        if @options.empty?
+          puts "\e[31mUsage: asc sub-ensure-assets [options]\e[0m"
+          puts 'Ensures each subscription has required assets (review screenshot + 1024x1024 image).'
+          puts
+          puts 'Options:'
+          puts '  --review-screenshot PATH     File to upload as the review screenshot (applied to all subs)'
+          puts '  --capture                    Capture current simulator screen and use it as review screenshot'
+          puts '  --output PATH                Output path for --capture (default: ./subscription-review.png)'
+          puts '  --simulator-id ID            Simulator device UDID for --capture'
+          puts '  --simulator-name NAME        Simulator device name for --capture (exact match)'
+          puts '  --image-file PATH            1024x1024 image to upload (applied to all subs)'
+          puts '  --image-dir DIR              Directory containing per-sub images (default pattern: %{product_id}.(png|jpg|jpeg))'
+          puts '  --image-pattern PATTERN      Filename pattern inside --image-dir (supports %{product_id})'
+          puts '  --only-missing               Skip subscriptions that already have the asset(s)'
+          puts '  --replace                    Replace existing assets (deletes then uploads)'
+          puts '  --wait                        Wait for assetDeliveryState COMPLETE after uploads'
+          puts '  --timeout SECONDS            Max wait per asset (default: 300)'
+          puts '  --interval SECONDS           Poll interval when waiting (default: 5)'
+          puts '  --dry-run                    Print what would change without uploading'
+          puts '  --yes                        Skip confirmation prompts'
+          exit 1
+        end
+
+        args = @options.dup
+        review_screenshot_path = nil
+        capture = false
+        output_path = nil
+        simulator_id = nil
+        simulator_name = nil
+        image_file = nil
+        image_dir = nil
+        image_pattern = nil
+        only_missing = false
+        replace = false
+        wait_complete = false
+        timeout = 300
+        interval = 5
+        dry_run = false
+        no_confirm = false
+        unknown = []
+
+        while args.any?
+          arg = args.shift
+          case arg
+          when '--review-screenshot'
+            review_screenshot_path = args.shift
+          when '--capture'
+            capture = true
+          when '--output'
+            output_path = args.shift
+          when '--simulator-id'
+            simulator_id = args.shift
+          when '--simulator-name'
+            simulator_name = args.shift
+          when '--image-file'
+            image_file = args.shift
+          when '--image-dir'
+            image_dir = args.shift
+          when '--image-pattern'
+            image_pattern = args.shift
+          when '--only-missing'
+            only_missing = true
+          when '--replace'
+            replace = true
+          when '--wait'
+            wait_complete = true
+          when '--timeout'
+            timeout = args.shift
+          when '--interval'
+            interval = args.shift
+          when '--dry-run'
+            dry_run = true
+          when '--yes', '--no-confirm'
+            no_confirm = true
+          else
+            unknown << arg
+          end
+        end
+
+        if unknown.any?
+          puts "\e[31mUnknown arguments: #{unknown.join(' ')}\e[0m"
+          exit 1
+        end
+
+        if output_path && !capture
+          puts "\e[31m--output requires --capture.\e[0m"
+          exit 1
+        end
+
+        if (simulator_id || simulator_name) && !capture
+          puts "\e[31m--simulator-id/--simulator-name require --capture.\e[0m"
+          exit 1
+        end
+
+        if simulator_id && simulator_name
+          puts "\e[31mPlease provide only one of --simulator-id or --simulator-name.\e[0m"
+          exit 1
+        end
+
+        if capture && review_screenshot_path
+          puts "\e[31mUse either --review-screenshot or --capture, not both.\e[0m"
+          exit 1
+        end
+
+        begin
+          timeout = Integer(timeout, 10)
+          interval = Integer(interval, 10)
+        rescue ArgumentError, TypeError
+          puts "\e[31m--timeout and --interval must be integers (seconds).\e[0m"
+          exit 1
+        end
+
+        if timeout < 1 || interval < 1
+          puts "\e[31m--timeout and --interval must be >= 1.\e[0m"
+          exit 1
+        end
+
+        if !dry_run && !capture && review_screenshot_path.nil? && image_file.nil? && image_dir.nil?
+          puts "\e[31mProvide at least one of --review-screenshot/--capture or --image-file/--image-dir (or use --dry-run).\e[0m"
+          exit 1
+        end
+
+        if json? && !no_confirm && !dry_run
+          puts "\e[31m--json requires --yes or --no-confirm to avoid interactive prompts.\e[0m"
+          exit 1
+        end
+
+        if capture
+          review_screenshot_path = output_path || 'subscription-review.png'
+          begin
+            capture_simulator_screenshot(
+              review_screenshot_path,
+              simulator_id: simulator_id,
+              simulator_name: simulator_name
+            )
+          rescue StandardError => e
+            puts "\e[31mScreenshot capture failed: #{e.message}\e[0m"
+            exit 1
+          end
+        end
+
+        if review_screenshot_path && !File.exist?(review_screenshot_path)
+          puts "\e[31mFile not found: #{review_screenshot_path}\e[0m"
+          exit 1
+        end
+
+        if image_file && !File.exist?(image_file)
+          puts "\e[31mFile not found: #{image_file}\e[0m"
+          exit 1
+        end
+
+        if image_dir && !Dir.exist?(image_dir)
+          puts "\e[31mDirectory not found: #{image_dir}\e[0m"
+          exit 1
+        end
+
+        subs = client.subscriptions
+        if subs.empty?
+          puts "\e[33mNo subscriptions found.\e[0m"
+          return
+        end
+
+        planned = subs.map do |s|
+          pid = s.dig('attributes', 'productId')
+          review = client.subscription_review_screenshot(subscription_id: s['id'])
+          images = client.subscription_images(subscription_id: s['id'])
+          image_path = resolve_subscription_image_path(
+            product_id: pid,
+            image_file: image_file,
+            image_dir: image_dir,
+            image_pattern: image_pattern
+          )
+
+          {
+            id: s['id'],
+            product_id: pid,
+            review_present: !review.nil?,
+            images_present: images.any?,
+            review_screenshot_path: review_screenshot_path,
+            image_path: image_path,
+            skip: only_missing && review && images.any?
+          }
+        end
+
+        planned.reject! { |p| p[:skip] }
+
+        if planned.empty?
+          puts "\e[32mNothing to do.\e[0m" unless quiet?
+          output_json({ ok: true, planned: [] }) if json?
+          return
+        end
+
+        missing_review_without_file = planned.any? { |p| (replace || !p[:review_present]) && p[:review_screenshot_path].nil? }
+        missing_image_without_file = planned.any? { |p| (replace || !p[:images_present]) && p[:image_path].nil? }
+
+        if !dry_run && (missing_review_without_file || missing_image_without_file)
+          puts "\e[31mMissing input files:\e[0m"
+          puts "  Review screenshot file is required (use --review-screenshot or --capture)." if missing_review_without_file
+          puts "  Image file(s) required (use --image-file or --image-dir)." if missing_image_without_file
+          exit 1
+        end
+
+        if dry_run
+          result = planned.map do |p|
+            {
+              product_id: p[:product_id],
+              would_upload_review_screenshot: (replace || !p[:review_present]),
+              would_upload_image: (replace || !p[:images_present]),
+              review_screenshot_path: p[:review_screenshot_path],
+              image_path: p[:image_path]
+            }
+          end
+
+          if json?
+            output_json({ ok: true, dry_run: true, subscriptions: result })
+          else
+            puts "\e[1mSubscription Assets (Dry Run)\e[0m"
+            puts '=' * 50
+            result.each do |r|
+              puts "#{r[:product_id]}:"
+              puts "  Review Screenshot: #{r[:would_upload_review_screenshot] ? 'UPLOAD' : 'ok'}"
+              puts "  Image: #{r[:would_upload_image] ? 'UPLOAD' : 'ok'}"
+            end
+          end
+          return
+        end
+
+        unless no_confirm
+          puts "\e[1mEnsure Subscription Assets\e[0m"
+          puts '=' * 50
+          planned.each { |p| puts p[:product_id] }
+          puts
+          puts "  Replace existing: #{replace ? 'yes' : 'no'}"
+          puts "  Wait for COMPLETE: #{wait_complete ? 'yes' : 'no'}"
+          puts
+          print "\e[33mProceed? (y/N): \e[0m"
+          confirm = $stdin.gets&.strip&.downcase
+          return unless confirm == 'y'
+        end
+
+        results = []
+        planned.each do |p|
+          pid = p[:product_id]
+          sub_id = p[:id]
+          entry = { product_id: pid, subscription_id: sub_id, actions: [] }
+
+          if replace || !p[:review_present]
+            existing = client.subscription_review_screenshot(subscription_id: sub_id)
+            if existing && replace
+              client.delete_subscription_review_screenshot(screenshot_id: existing[:id])
+              entry[:actions] << { action: 'delete_review_screenshot', id: existing[:id] }
+            end
+
+            if p[:review_screenshot_path]
+              reservation = client.upload_subscription_review_screenshot(subscription_id: sub_id, file_path: p[:review_screenshot_path])
+              screenshot_id = reservation.dig('data', 'id')
+              entry[:actions] << { action: 'upload_review_screenshot', id: screenshot_id, file: p[:review_screenshot_path] }
+
+              if wait_complete && screenshot_id
+                wait_for_subscription_asset(type: :review_screenshot, id: screenshot_id, timeout: timeout, interval: interval)
+                entry[:actions] << { action: 'wait_review_screenshot_complete', id: screenshot_id }
+              end
+            end
+          end
+
+          if replace || !p[:images_present]
+            existing_images = client.subscription_images(subscription_id: sub_id)
+            if existing_images.any? && replace
+              existing_images.each do |img|
+                client.delete_subscription_image(image_id: img[:id])
+                entry[:actions] << { action: 'delete_image', id: img[:id] }
+              end
+            end
+
+            if p[:image_path]
+              reservation = client.upload_subscription_image(subscription_id: sub_id, file_path: p[:image_path])
+              image_id = reservation.dig('data', 'id')
+              entry[:actions] << { action: 'upload_image', id: image_id, file: p[:image_path] }
+
+              if wait_complete && image_id
+                wait_for_subscription_asset(type: :image, id: image_id, timeout: timeout, interval: interval)
+                entry[:actions] << { action: 'wait_image_complete', id: image_id }
+              end
+            end
+          end
+
+          results << entry
+        end
+
+        if json?
+          output_json({ ok: true, subscriptions: results })
+        else
+          puts "\e[32mDone.\e[0m"
+        end
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
       def cmd_sub_metadata_status
         if @options.empty?
           puts "\e[31mUsage: asc sub-metadata-status <product_id> [--json]\e[0m"
@@ -2202,6 +2501,48 @@ module AppStoreConnect
         end
 
         lines
+      end
+
+      def resolve_subscription_image_path(product_id:, image_file:, image_dir:, image_pattern:)
+        return image_file if image_file
+        return nil unless image_dir
+
+        pattern = (image_pattern || '%{product_id}')
+        base = format(pattern, product_id: product_id)
+
+        candidates = [
+          File.join(image_dir, base),
+          File.join(image_dir, "#{base}.png"),
+          File.join(image_dir, "#{base}.jpg"),
+          File.join(image_dir, "#{base}.jpeg"),
+          File.join(image_dir, "#{product_id}.png"),
+          File.join(image_dir, "#{product_id}.jpg"),
+          File.join(image_dir, "#{product_id}.jpeg")
+        ].uniq
+
+        candidates.find { |path| File.exist?(path) }
+      end
+
+      def wait_for_subscription_asset(type:, id:, timeout:, interval:)
+        deadline = Time.now + timeout
+        loop do
+          state = case type
+                  when :review_screenshot
+                    client.subscription_review_screenshot_by_id(screenshot_id: id)&.dig(:upload_state)
+                  when :image
+                    client.subscription_image(image_id: id)&.dig(:upload_state)
+                  else
+                    raise ArgumentError, "Unknown asset type: #{type}"
+                  end
+
+          return if state == 'COMPLETE'
+
+          if Time.now >= deadline
+            raise ApiError, "Timed out waiting for #{type} #{id} to reach COMPLETE (last state: #{state || 'unknown'})."
+          end
+
+          sleep(interval)
+        end
       end
     end
   end

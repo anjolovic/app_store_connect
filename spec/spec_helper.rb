@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
-require 'simplecov'
-SimpleCov.start do
-  add_filter '/spec/'
-  add_group 'Client', 'lib/app_store_connect/client'
-  add_group 'CLI', 'lib/app_store_connect/cli.rb'
-  add_group 'Core', ['lib/app_store_connect.rb', 'lib/app_store_connect/configuration.rb']
+if ENV['SIMPLECOV'] == '1'
+  require 'simplecov'
+  SimpleCov.start do
+    add_filter '/spec/'
+    add_group 'Client', 'lib/app_store_connect/client'
+    add_group 'CLI', 'lib/app_store_connect/cli.rb'
+    add_group 'Core', ['lib/app_store_connect.rb', 'lib/app_store_connect/configuration.rb']
+  end
 end
 
 require 'app_store_connect'
@@ -38,6 +40,14 @@ RSpec.configure do |config|
   config.before do
     AppStoreConnect.reset_configuration!
   end
+
+  # Some specs intentionally raise/rescue SystemExit. Ruby can retain the last
+  # exception in $ERROR_INFO even when it's expected, which can cause processes
+  # to exit non-zero despite a passing suite.
+  config.after do
+    $ERROR_INFO = nil
+  end
+
 end
 
 # Helper to stub App Store Connect API responses

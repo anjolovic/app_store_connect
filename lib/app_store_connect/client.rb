@@ -73,7 +73,9 @@ module AppStoreConnect
       http_client: nil,
       skip_crl_verification: nil,
       verify_ssl: nil,
-      use_curl: nil
+      use_curl: nil,
+      upload_retries: nil,
+      upload_retry_sleep: nil
     )
       config = AppStoreConnect.configuration
 
@@ -87,6 +89,10 @@ module AppStoreConnect
       skip_crl = skip_crl_verification.nil? ? config.skip_crl_verification : skip_crl_verification
       verify = verify_ssl.nil? ? config.verify_ssl : verify_ssl
       curl = use_curl.nil? ? config.use_curl : use_curl
+
+      # Upload robustness (multipart PUT to uploadOperations URLs)
+      @upload_retries = upload_retries.nil? ? config.upload_retries : upload_retries
+      @upload_retry_sleep = upload_retry_sleep.nil? ? config.upload_retry_sleep : upload_retry_sleep
 
       @http_client = http_client || build_http_client(
         skip_crl_verification: skip_crl,
@@ -640,7 +646,7 @@ module AppStoreConnect
 
     def build_http_client(skip_crl_verification:, verify_ssl:, use_curl:)
       if use_curl
-        CurlHttpClient.new
+        CurlHttpClient.new(verify_ssl: verify_ssl)
       else
         HttpClient.new(
           skip_crl_verification: skip_crl_verification,

@@ -126,20 +126,53 @@ module AppStoreConnect
 
       # Upload a file part to the asset upload URL
       def upload_part(url:, data:, headers:)
-        uri = URI(url)
+        headers_hash = headers.each_with_object({}) { |h, acc| acc[h['name']] = h['value'] }
 
-        http = Net::HTTP.new(uri.host, uri.port)
-        http.use_ssl = true
-        configure_upload_ssl(http)
+        max_retries = (@upload_retries || 0).to_i
+        base_sleep = (@upload_retry_sleep || 1.0).to_f
+        attempt = 0
 
-        request = Net::HTTP::Put.new(uri)
-        headers.each { |h| request[h['name']] = h['value'] }
-        request.body = data
+        begin
+          attempt += 1
 
-        response = http.request(request)
-        raise ApiError, "Upload failed: #{response.code}" unless response.is_a?(Net::HTTPSuccess)
+          if defined?(CurlHttpClient) && @http_client.is_a?(CurlHttpClient)
+            result = @http_client.execute(method: :put, url: url, headers: headers_hash, raw_body: data)
+            status = result[:status].to_i
+            raise ApiError, "Upload failed: #{status}" unless status >= 200 && status < 300
+            return result
+          end
 
-        response
+          uri = URI(url)
+
+          http = Net::HTTP.new(uri.host, uri.port)
+          http.use_ssl = true
+          configure_upload_ssl(http)
+
+          request = Net::HTTP::Put.new(uri)
+          headers_hash.each { |k, v| request[k] = v }
+          request.body = data
+
+          response = http.request(request)
+          raise ApiError, "Upload failed: #{response.code}" unless response.is_a?(Net::HTTPSuccess)
+
+          response
+        rescue OpenSSL::SSL::SSLError, Errno::ECONNRESET, EOFError, Net::OpenTimeout, Net::ReadTimeout,
+               SocketError => e
+          raise if attempt > max_retries
+
+          # Backoff: base * attempt with a tiny jitter to avoid thundering herd
+          sleep(base_sleep * attempt + rand * 0.1)
+          retry
+        rescue ApiError => e
+          # Retry server errors and rate limiting; do not retry client errors.
+          status = e.message[/Upload failed: (\d+)/, 1]&.to_i
+          retriable = status && (status >= 500 || status == 429 || status == 408)
+
+          raise if !retriable || attempt > max_retries
+
+          sleep(base_sleep * attempt + rand * 0.1)
+          retry
+        end
       end
 
       def configure_upload_ssl(http)

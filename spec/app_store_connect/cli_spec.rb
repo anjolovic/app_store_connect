@@ -699,6 +699,178 @@ RSpec.describe AppStoreConnect::CLI do
 
         expect { cli.run }.to output(/TAX001/).to_stdout
       end
+
+      it 'outputs dry-run json for sub-ensure-assets with only missing subscriptions' do
+        review_file = Tempfile.new(['review', '.png'])
+        image_file = Tempfile.new(['image', '.png'])
+        review_file.binmode
+        image_file.binmode
+        review_file.write('fakepng')
+        image_file.write('fakepng1024')
+        review_file.rewind
+        image_file.rewind
+
+        stub_api_get(
+          '/apps/123456789/subscriptionGroups',
+          response_body: {
+            data: [
+              { id: 'group1', type: 'subscriptionGroups', attributes: { referenceName: 'Main Plans' } }
+            ]
+          }
+        )
+        stub_api_get(
+          '/subscriptionGroups/group1/subscriptions',
+          response_body: {
+            data: [
+              { id: 'sub1', type: 'subscriptions', attributes: { productId: 'com.example.app.plan.missing', name: 'Missing', state: 'MISSING_METADATA' } },
+              { id: 'sub2', type: 'subscriptions', attributes: { productId: 'com.example.app.plan.ok', name: 'OK', state: 'READY_TO_SUBMIT' } }
+            ]
+          }
+        )
+
+        stub_api_get('/subscriptions/sub1/appStoreReviewScreenshot', response_body: sample_error_response(title: 'Not found'), status: 404)
+        stub_api_get('/subscriptions/sub1/subscriptionImages', response_body: { data: [] })
+
+        stub_api_get(
+          '/subscriptions/sub2/appStoreReviewScreenshot',
+          response_body: { data: { id: 'shot_ok', type: 'subscriptionAppStoreReviewScreenshots', attributes: { fileName: 'ok.png', fileSize: 123, assetDeliveryState: { state: 'COMPLETE' } } } }
+        )
+        stub_api_get(
+          '/subscriptions/sub2/subscriptionImages',
+          response_body: { data: [{ id: 'img_ok', type: 'subscriptionImages', attributes: { fileName: 'ok.png', fileSize: 123, assetDeliveryState: { state: 'COMPLETE' } } }] }
+        )
+
+        cli = described_class.new([
+                                   'sub-ensure-assets',
+                                   '--review-screenshot', review_file.path,
+                                   '--image-file', image_file.path,
+                                   '--only-missing',
+                                   '--dry-run',
+                                   '--json'
+                                 ])
+
+        expect { cli.run }.to output(/"product_id": "com\\.example\\.app\\.plan\\.missing"/).to_stdout
+      ensure
+        review_file.close
+        review_file.unlink
+        image_file.close
+        image_file.unlink
+      end
+
+      it 'uploads missing assets for sub-ensure-assets and waits for COMPLETE' do
+        review_file = Tempfile.new(['review', '.png'])
+        image_file = Tempfile.new(['image', '.png'])
+        review_file.binmode
+        image_file.binmode
+        review_file.write('fakepng')
+        image_file.write('fakepng1024')
+        review_file.rewind
+        image_file.rewind
+
+        stub_api_get(
+          '/apps/123456789/subscriptionGroups',
+          response_body: {
+            data: [
+              { id: 'group1', type: 'subscriptionGroups', attributes: { referenceName: 'Main Plans' } }
+            ]
+          }
+        )
+        stub_api_get(
+          '/subscriptionGroups/group1/subscriptions',
+          response_body: {
+            data: [
+              { id: 'sub1', type: 'subscriptions', attributes: { productId: 'com.example.app.plan.missing', name: 'Missing', state: 'MISSING_METADATA' } }
+            ]
+          }
+        )
+
+        stub_api_get('/subscriptions/sub1/appStoreReviewScreenshot', response_body: sample_error_response(title: 'Not found'), status: 404)
+        stub_api_get('/subscriptions/sub1/subscriptionImages', response_body: { data: [] })
+
+        stub_api_post(
+          '/subscriptionAppStoreReviewScreenshots',
+          response_body: {
+            data: {
+              id: 'shot1',
+              type: 'subscriptionAppStoreReviewScreenshots',
+              attributes: {
+                uploadOperations: [
+                  {
+                    url: 'https://example-upload.test/review-shot1',
+                    offset: 0,
+                    length: 7,
+                    requestHeaders: [{ name: 'Content-Type', value: 'image/png' }]
+                  }
+                ]
+              }
+            }
+          }
+        )
+        stub_request(:put, 'https://example-upload.test/review-shot1').to_return(status: 200, body: '')
+        stub_api_patch('/subscriptionAppStoreReviewScreenshots/shot1', response_body: { data: { id: 'shot1', type: 'subscriptionAppStoreReviewScreenshots' } })
+
+        first = stub_api_get(
+          '/subscriptionAppStoreReviewScreenshots/shot1',
+          response_body: { data: { id: 'shot1', type: 'subscriptionAppStoreReviewScreenshots', attributes: { assetDeliveryState: { state: 'UPLOADED' } } } }
+        )
+        first.to_return(
+          status: 200,
+          body: { data: { id: 'shot1', type: 'subscriptionAppStoreReviewScreenshots', attributes: { assetDeliveryState: { state: 'COMPLETE' } } } }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
+
+        stub_api_post(
+          '/subscriptionImages',
+          response_body: {
+            data: {
+              id: 'img1',
+              type: 'subscriptionImages',
+              attributes: {
+                uploadOperations: [
+                  {
+                    url: 'https://example-upload.test/image-img1',
+                    offset: 0,
+                    length: 11,
+                    requestHeaders: [{ name: 'Content-Type', value: 'image/png' }]
+                  }
+                ]
+              }
+            }
+          }
+        )
+        stub_request(:put, 'https://example-upload.test/image-img1').to_return(status: 200, body: '')
+        stub_api_patch('/subscriptionImages/img1', response_body: { data: { id: 'img1', type: 'subscriptionImages' } })
+
+        second = stub_api_get(
+          '/subscriptionImages/img1',
+          response_body: { data: { id: 'img1', type: 'subscriptionImages', attributes: { assetDeliveryState: { state: 'UPLOADED' } } } }
+        )
+        second.to_return(
+          status: 200,
+          body: { data: { id: 'img1', type: 'subscriptionImages', attributes: { assetDeliveryState: { state: 'COMPLETE' } } } }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
+
+        cli = described_class.new([
+                                   'sub-ensure-assets',
+                                   '--review-screenshot', review_file.path,
+                                   '--image-file', image_file.path,
+                                   '--yes',
+                                   '--wait',
+                                   '--timeout', '2',
+                                   '--interval', '1',
+                                   '--json'
+                                 ])
+
+        expect { cli.run }.to output(/"upload_review_screenshot"/).to_stdout
+        expect(WebMock).to have_requested(:post, /subscriptionAppStoreReviewScreenshots/)
+        expect(WebMock).to have_requested(:post, /subscriptionImages/)
+      ensure
+        review_file.close
+        review_file.unlink
+        image_file.close
+        image_file.unlink
+      end
     end
 
     context 'when configuration is missing' do
@@ -754,7 +926,7 @@ RSpec.describe AppStoreConnect::CLI do
       expected_commands = %w[
         status review builds apps help testers users territories categories
         create-sub fix-sub-metadata
-        sub-details sub-metadata-status
+        sub-details sub-metadata-status sub-ensure-assets
         sub-availability set-sub-availability sub-price-points sub-prices add-sub-price
         sub-image upload-sub-image delete-sub-image
         sub-review-screenshot upload-sub-review-screenshot delete-sub-review-screenshot
