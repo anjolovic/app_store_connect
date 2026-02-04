@@ -13,6 +13,12 @@ module AppStoreConnect
           \e[1mUSAGE:\e[0m
             asc <command> [options]
 
+          \e[1mGLOBAL OPTIONS:\e[0m
+            --json        Output machine-readable JSON (where supported)
+            --no-color    Disable ANSI colors
+            --quiet       Reduce output (where supported)
+            --verbose     Extra output (where supported)
+
           \e[1mREAD COMMANDS:\e[0m
             status            Full app status summary (default)
             review            Check review submission status
@@ -21,6 +27,7 @@ module AppStoreConnect
             review-info       Show review contact info and notes
             subs              List subscription products
             sub-details       Detailed subscription info with localizations
+            sub-metadata-status Show missing metadata checklist for subscriptions
             sub-availability  Show subscription availability territories
             sub-price-points  List subscription price points for territory (limit-based listing)
             sub-prices        Show subscription price schedule

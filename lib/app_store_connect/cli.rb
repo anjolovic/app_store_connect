@@ -47,7 +47,7 @@ module AppStoreConnect
       status review rejection session subs subscriptions builds apps ready help
       review-info update-review-notes update-review-contact update-demo-account
       cancel-review submit create-review-detail content-rights set-content-rights
-      sub-details create-sub create-subscription fix-sub-metadata
+      sub-details sub-metadata-status create-sub create-subscription fix-sub-metadata
       sub-availability set-sub-availability
       sub-price-points sub-prices add-sub-price
       sub-image upload-sub-image delete-sub-image
@@ -77,8 +77,15 @@ module AppStoreConnect
     ].freeze
 
     def initialize(args)
+      args = args.dup
+      @global_options = parse_global_options!(args)
+
       @command = args.first || 'status'
       @options = args.drop(1)
+    end
+
+    def global_options
+      @global_options ||= {}
     end
 
     def run
@@ -97,6 +104,44 @@ module AppStoreConnect
     rescue ApiError => e
       puts "\e[31mAPI Error:\e[0m #{e.message}"
       exit 1
+    end
+
+    private
+
+    # Parse and remove global flags before command dispatch.
+    # Keep this conservative to avoid breaking per-command parsing.
+    def parse_global_options!(args)
+      opts = {
+        json: false,
+        no_color: false,
+        quiet: false,
+        verbose: false
+      }
+
+      consumed = []
+      args.each_with_index do |arg, idx|
+        case arg
+        when '--json'
+          opts[:json] = true
+          consumed << idx
+        when '--no-color'
+          opts[:no_color] = true
+          consumed << idx
+        when '--quiet'
+          opts[:quiet] = true
+          consumed << idx
+        when '--verbose'
+          opts[:verbose] = true
+          consumed << idx
+        end
+      end
+
+      consumed.sort.reverse.each { |idx| args.delete_at(idx) }
+
+      # Provide a standard opt-out for ANSI colors.
+      ENV['NO_COLOR'] = '1' if opts[:no_color]
+
+      opts
     end
   end
 end

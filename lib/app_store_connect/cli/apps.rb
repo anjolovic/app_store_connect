@@ -284,6 +284,11 @@ module AppStoreConnect
 
         result = client.submission_readiness
 
+        if json?
+          output_json(result)
+          return
+        end
+
         if result[:ready]
           puts "\e[32mApp appears ready for submission!\e[0m"
         else
@@ -295,6 +300,19 @@ module AppStoreConnect
 
         puts
         puts "Current state: #{result[:current_state]}"
+
+        missing_subs = (result.dig(:status, :subscriptions) || []).select { |s| s[:state] == 'MISSING_METADATA' }
+        if missing_subs.any?
+          puts
+          puts "\e[1mSubscriptions Missing Metadata:\e[0m"
+          missing_subs.each do |sub|
+            puts
+            puts "\e[1m#{sub[:product_id]}\e[0m (#{sub[:name] || 'Subscription'})"
+            subscription_metadata_status(sub[:id], product_id: sub[:product_id]).each do |line|
+              puts "  - #{line}"
+            end
+          end
+        end
 
         # Show screenshot status
         if result[:screenshots] && result[:screenshots][:total].positive?

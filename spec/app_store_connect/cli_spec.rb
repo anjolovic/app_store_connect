@@ -37,7 +37,9 @@ RSpec.describe AppStoreConnect::CLI do
 
     it 'sets options from remaining args' do
       cli = described_class.new(['status', '--verbose', '--json'])
-      expect(cli.instance_variable_get(:@options)).to eq(['--verbose', '--json'])
+      expect(cli.instance_variable_get(:@options)).to eq([])
+      expect(cli.global_options[:verbose]).to eq(true)
+      expect(cli.global_options[:json]).to eq(true)
     end
 
     it 'defaults to status command when no args' do
@@ -752,6 +754,7 @@ RSpec.describe AppStoreConnect::CLI do
       expected_commands = %w[
         status review builds apps help testers users territories categories
         create-sub fix-sub-metadata
+        sub-details sub-metadata-status
         sub-availability set-sub-availability sub-price-points sub-prices add-sub-price
         sub-image upload-sub-image delete-sub-image
         sub-review-screenshot upload-sub-review-screenshot delete-sub-review-screenshot

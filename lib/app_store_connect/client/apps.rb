@@ -35,6 +35,7 @@ module AppStoreConnect
           end,
           subscriptions: subs.map do |s|
             {
+              id: s['id'],
               product_id: s.dig('attributes', 'productId'),
               name: s.dig('attributes', 'name'),
               state: s.dig('attributes', 'state'),

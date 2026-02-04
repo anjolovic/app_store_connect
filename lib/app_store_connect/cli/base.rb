@@ -6,8 +6,33 @@ module AppStoreConnect
     module Base
       private
 
+      def global_options
+        instance_variable_get(:@global_options) || {}
+      end
+
       def client
         @client ||= Client.new
+      end
+
+      def json?
+        !!global_options[:json]
+      end
+
+      def quiet?
+        !!global_options[:quiet]
+      end
+
+      def verbose?
+        !!global_options[:verbose]
+      end
+
+      def no_color?
+        ENV['NO_COLOR'] == '1'
+      end
+
+      def output_json(obj)
+        require 'json'
+        puts JSON.pretty_generate(obj)
       end
 
       def find_active_phased_release

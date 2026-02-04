@@ -54,7 +54,7 @@ module AppStoreConnect
         display_name = nil
         description = nil
         dry_run = false
-        json_output = false
+        json_output = json?
         no_confirm = false
         localizations_file = nil
         add_localizations = []
@@ -109,8 +109,6 @@ module AppStoreConnect
             no_confirm = true
           when '--dry-run'
             dry_run = true
-          when '--json'
-            json_output = true
           when '--localizations-file'
             localizations_file = args.shift
           when '--add-localization'
@@ -483,7 +481,7 @@ module AppStoreConnect
         display_name = nil
         description = nil
         dry_run = false
-        json_output = false
+        json_output = json?
         no_confirm = false
         localizations_file = nil
         add_localizations = []
@@ -508,8 +506,6 @@ module AppStoreConnect
             no_confirm = true
           when '--dry-run'
             dry_run = true
-          when '--json'
-            json_output = true
           when '--localizations-file'
             localizations_file = args.shift
           when '--add-localization'
@@ -1569,11 +1565,68 @@ module AppStoreConnect
 
           if attrs['state'] == 'MISSING_METADATA'
             puts "  \e[1mMetadata Status:\e[0m"
-            subscription_metadata_status(sub_id, localizations: locs).each do |line|
+            subscription_metadata_status(sub_id, product_id: attrs['productId'], localizations: locs).each do |line|
               puts "    #{line}"
             end
             puts
           end
+        end
+      end
+
+      def cmd_sub_metadata_status
+        if @options.empty?
+          puts "\e[31mUsage: asc sub-metadata-status <product_id> [--json]\e[0m"
+          puts "\e[31mUsage: asc sub-metadata-status --all [--json]\e[0m"
+          exit 1
+        end
+
+        args = @options.dup
+        all = args.delete('--all')
+        product_id = all ? nil : args.shift
+
+        if !all && (product_id.nil? || product_id.strip.empty?)
+          puts "\e[31mMissing product_id. Use --all to check all subscriptions.\e[0m"
+          exit 1
+        end
+
+        subs = client.subscriptions
+        targets =
+          if all
+            subs.select { |s| s.dig('attributes', 'state') == 'MISSING_METADATA' }
+          else
+            [find_subscription_by_product_id!(product_id)]
+          end
+
+        if json?
+          payload = {
+            subscriptions: targets.map do |s|
+              attrs = s['attributes'] || {}
+              checks = subscription_metadata_checks(s['id'])
+              {
+                id: s['id'],
+                product_id: attrs['productId'],
+                name: attrs['name'],
+                state: attrs['state'],
+                group_level: attrs['groupLevel'],
+                checks: checks
+              }
+            end
+          }
+          output_json(payload)
+          return
+        end
+
+        targets.each do |s|
+          attrs = s['attributes'] || {}
+          puts "\e[1m#{attrs['name']}\e[0m (ID: #{s['id']})"
+          puts "  Product ID: #{attrs['productId']}"
+          puts "  State: #{attrs['state']}"
+          puts "  Group Level: #{attrs['groupLevel']}"
+          puts
+          subscription_metadata_status(s['id'], product_id: attrs['productId']).each do |line|
+            puts "  - #{line}"
+          end
+          puts
         end
       end
 
@@ -1993,85 +2046,159 @@ module AppStoreConnect
         raise 'xcrun not found. Install Xcode command line tools.'
       end
 
-      def subscription_metadata_status(subscription_id, localizations: nil)
-        lines = []
+      def subscription_metadata_checks(subscription_id, localizations: nil)
+        checks = {}
 
         locs = localizations
         if locs.nil?
           begin
             locs = client.subscription_localizations(subscription_id: subscription_id)
-          rescue ApiError
+          rescue ApiError => e
+            checks[:localizations] = { status: 'unknown', error: e.message }
             locs = []
-            lines << 'Localizations: Unknown (API error)'
           end
         end
 
-        if locs&.any?
-          lines << "Localizations: OK (#{locs.size})"
-        else
-          lines << 'Localizations: MISSING (use: asc update-sub-localization <product_id> en-US ...)'
-        end
+        checks[:localizations] ||= if locs.any?
+                                    { status: 'ok', count: locs.size }
+                                  else
+                                    { status: 'missing' }
+                                  end
 
         begin
           availability = client.subscription_availability(subscription_id: subscription_id)
           if availability.nil? || availability[:territories].empty?
-            lines << 'Availability: MISSING (use: asc set-sub-availability <product_id> ...)'
+            checks[:availability] = { status: 'missing' }
           else
-            new_territories = availability[:available_in_new_territories]
-            detail = "#{availability[:territories].size} territories"
-            detail += ", new territories: #{new_territories.nil? ? 'unset' : new_territories}"
-            lines << "Availability: OK (#{detail})"
-            if new_territories.nil?
-              lines << 'Availability: availableInNewTerritories missing (use: asc set-sub-availability <product_id> --available-in-new-territories true|false)'
-            end
+            checks[:availability] = {
+              status: 'ok',
+              territories_count: availability[:territories].size,
+              available_in_new_territories: availability[:available_in_new_territories]
+            }
           end
         rescue ApiError => e
-          lines << "Availability: Unknown (#{e.message})"
+          checks[:availability] = { status: 'unknown', error: e.message }
         end
 
         begin
           prices = client.subscription_prices(subscription_id: subscription_id)
-          if prices.empty?
-            lines << 'Price Schedule: MISSING (use: asc add-sub-price <product_id> <price_point_id> ...)'
-          else
-            lines << "Price Schedule: OK (#{prices.size} price(s))"
-          end
+          checks[:prices] = if prices.empty?
+                              { status: 'missing' }
+                            else
+                              { status: 'ok', count: prices.size }
+                            end
         rescue ApiError => e
-          lines << "Price Schedule: Unknown (#{e.message})"
+          checks[:prices] = { status: 'unknown', error: e.message }
         end
 
         begin
           screenshot = client.subscription_review_screenshot(subscription_id: subscription_id)
-          if screenshot.nil?
-            lines << 'Review Screenshot: MISSING (use: asc upload-sub-review-screenshot <product_id> <file>)'
-          else
-            lines << "Review Screenshot: OK (#{screenshot[:file_name]})"
-          end
+          checks[:review_screenshot] = if screenshot.nil?
+                                         { status: 'missing' }
+                                       else
+                                         { status: 'ok', file_name: screenshot[:file_name], upload_state: screenshot[:upload_state] }
+                                       end
         rescue ApiError => e
-          lines << "Review Screenshot: Unknown (#{e.message})"
+          checks[:review_screenshot] = { status: 'unknown', error: e.message }
         end
 
         begin
           images = client.subscription_images(subscription_id: subscription_id)
-          if images.empty?
-            lines << 'Image: None (optional unless using offers/promotions)'
-          else
-            lines << "Image: OK (#{images.size} image(s))"
-          end
+          checks[:image] = if images.empty?
+                             { status: 'none' }
+                           else
+                             { status: 'ok', count: images.size }
+                           end
         rescue ApiError => e
-          lines << "Image: Unknown (#{e.message})"
+          checks[:image] = { status: 'unknown', error: e.message }
         end
 
         begin
           tax_category = client.subscription_tax_category(subscription_id: subscription_id)
-          if tax_category.nil?
-            lines << 'Tax Category: Not set (set in App Store Connect UI if required)'
-          else
-            label = tax_category[:name] || tax_category[:id]
-            lines << "Tax Category: OK (#{label})"
-          end
+          checks[:tax_category] = if tax_category.nil?
+                                    { status: 'unset' }
+                                  else
+                                    { status: 'ok', id: tax_category[:id], name: tax_category[:name] }
+                                  end
         rescue ApiError => e
-          lines << "Tax Category: Unavailable (#{e.message})"
+          checks[:tax_category] = { status: 'unknown', error: e.message }
+        end
+
+        checks
+      end
+
+      def subscription_metadata_status(subscription_id, product_id: nil, localizations: nil)
+        checks = subscription_metadata_checks(subscription_id, localizations: localizations)
+        pid = product_id || '<product_id>'
+
+        lines = []
+
+        loc = checks[:localizations]
+        case loc[:status]
+        when 'ok'
+          lines << "Localizations: OK (#{loc[:count]})"
+        when 'missing'
+          lines << "Localizations: MISSING (use: asc update-sub-localization #{pid} en-US ...)"
+        else
+          lines << "Localizations: Unknown (#{loc[:error]})"
+        end
+
+        avail = checks[:availability]
+        case avail[:status]
+        when 'ok'
+          detail = "#{avail[:territories_count]} territories"
+          new_territories = avail[:available_in_new_territories]
+          detail += ", new territories: #{new_territories.nil? ? 'unset' : new_territories}"
+          lines << "Availability: OK (#{detail})"
+          if new_territories.nil?
+            lines << "Availability: availableInNewTerritories missing (use: asc set-sub-availability #{pid} --available-in-new-territories true|false ...)"
+          end
+        when 'missing'
+          lines << "Availability: MISSING (use: asc set-sub-availability #{pid} ...)"
+        else
+          lines << "Availability: Unknown (#{avail[:error]})"
+        end
+
+        prices = checks[:prices]
+        case prices[:status]
+        when 'ok'
+          lines << "Price Schedule: OK (#{prices[:count]} price(s))"
+        when 'missing'
+          lines << "Price Schedule: MISSING (use: asc add-sub-price #{pid} <price_point_id> ...)"
+        else
+          lines << "Price Schedule: Unknown (#{prices[:error]})"
+        end
+
+        rs = checks[:review_screenshot]
+        case rs[:status]
+        when 'ok'
+          state = rs[:upload_state] ? " (#{rs[:upload_state]})" : ''
+          lines << "Review Screenshot: OK (#{rs[:file_name]}#{state})"
+        when 'missing'
+          lines << "Review Screenshot: MISSING (use: asc upload-sub-review-screenshot #{pid} <file>)"
+        else
+          lines << "Review Screenshot: Unknown (#{rs[:error]})"
+        end
+
+        img = checks[:image]
+        case img[:status]
+        when 'ok'
+          lines << "Image: OK (#{img[:count]} image(s))"
+        when 'none'
+          lines << 'Image: None (optional unless using offers/promotions)'
+        else
+          lines << "Image: Unknown (#{img[:error]})"
+        end
+
+        tax = checks[:tax_category]
+        case tax[:status]
+        when 'ok'
+          label = tax[:name] || tax[:id]
+          lines << "Tax Category: OK (#{label})"
+        when 'unset'
+          lines << 'Tax Category: Not set (set in App Store Connect UI if required)'
+        else
+          lines << "Tax Category: Unavailable (#{tax[:error]})"
         end
 
         lines
