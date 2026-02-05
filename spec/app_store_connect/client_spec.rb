@@ -706,4 +706,94 @@ RSpec.describe AppStoreConnect::Client do
       expect { client.delete_app_screenshot(screenshot_id: 'ss123') }.not_to raise_error
     end
   end
+
+  describe '#subscription_images' do
+    it 'uses /subscriptions/{id}/images when available and prefers attributes.state' do
+      stub_api_get(
+        '/subscriptions/sub1/images',
+        response_body: {
+          data: [
+            {
+              id: 'img1',
+              type: 'subscriptionImages',
+              attributes: {
+                fileName: 'sub.png',
+                fileSize: 12_345,
+                state: 'COMPLETE',
+                assetDeliveryState: { state: 'UPLOADED' }
+              }
+            }
+          ]
+        }
+      )
+
+      images = client.subscription_images(subscription_id: 'sub1')
+      expect(images.length).to eq(1)
+      expect(images.first[:upload_state]).to eq('COMPLETE')
+    end
+
+    it 'falls back to /subscriptions/{id}/subscriptionImages when /images returns 404' do
+      stub_api_get(
+        '/subscriptions/sub1/images',
+        response_body: sample_error_response(title: 'Not found'),
+        status: 404
+      )
+      stub_api_get(
+        '/subscriptions/sub1/subscriptionImages',
+        response_body: {
+          data: [
+            {
+              id: 'img1',
+              type: 'subscriptionImages',
+              attributes: {
+                fileName: 'sub.png',
+                fileSize: 12_345,
+                assetDeliveryState: { state: 'COMPLETE' }
+              }
+            }
+          ]
+        }
+      )
+
+      images = client.subscription_images(subscription_id: 'sub1')
+      expect(images.length).to eq(1)
+      expect(images.first[:upload_state]).to eq('COMPLETE')
+    end
+  end
+
+  describe '#update_subscription_tax_category' do
+    it 'fails fast with a helpful message when endpoint is not available' do
+      stub_api_patch(
+        '/subscriptions/sub1/relationships/taxCategory',
+        response_body: sample_error_response(title: 'Not found'),
+        status: 404
+      )
+
+      expect do
+        client.update_subscription_tax_category(subscription_id: 'sub1', tax_category_id: 'TAX001')
+      end.to raise_error(AppStoreConnect::ApiError, /Set tax category in App Store Connect UI/)
+    end
+  end
+
+  describe '#submit_subscription_group' do
+    it 'submits a subscription group for review' do
+      stub_api_post(
+        '/subscriptionGroupSubmissions',
+        response_body: {
+          data: {
+            id: 'sgs1',
+            type: 'subscriptionGroupSubmissions',
+            attributes: {
+              state: 'WAITING_FOR_REVIEW',
+              createdDate: '2026-02-05T00:00:00Z'
+            }
+          }
+        }
+      )
+
+      result = client.submit_subscription_group(group_id: 'group1')
+      expect(result[:id]).to eq('sgs1')
+      expect(result[:state]).to eq('WAITING_FOR_REVIEW')
+    end
+  end
 end

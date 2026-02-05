@@ -197,6 +197,11 @@ asc create-sub com.example.app.plan.monthly "Monthly Plan" 1m \
 asc sub-availability com.example.app.plan.monthly
 asc set-sub-availability com.example.app.plan.monthly USA CAN GBR --available-in-new-territories true
 
+# Subscription groups (auto-renewable submissions are group-scoped)
+asc sub-groups
+asc sub-group-submissions "Main Plans"
+asc submit-sub-group "Main Plans" --yes
+
 # Price points and schedule
 asc sub-price-points com.example.app.plan.monthly USA --all
 # Note: --all uses a large limit (2000) because cursor pagination is unreliable for this endpoint.
@@ -235,7 +240,8 @@ asc delete-sub-intro-offer OFFER_ID
 # Tax category
 asc set-sub-tax-category com.example.app.plan.monthly TAX_CATEGORY_ID
 asc tax-categories
-Note: if `tax-categories` returns Not found, set `APP_STORE_CONNECT_APP_ID` to enable the app-scoped fallback.
+Note: Apple does not expose tax categories for some accounts via the public ASC API (404).
+If `tax-categories` or `set-sub-tax-category` returns 404, set the tax category in App Store Connect UI.
 ```
 
 ### Responding to Apple Review Requests

@@ -1530,6 +1530,106 @@ module AppStoreConnect
         end
       end
 
+      def cmd_sub_groups
+        groups = client.subscription_groups
+
+        if groups.empty?
+          puts "\e[33mNo subscription groups found.\e[0m"
+          return
+        end
+
+        puts "\e[1mSubscription Groups\e[0m"
+        puts '=' * 50
+        groups.each do |g|
+          puts "\e[1m#{subscription_group_name(g) || '(unnamed)'}\e[0m"
+          puts "  ID: #{g['id']}"
+          puts
+        end
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_sub_group_submissions
+        if @options.empty?
+          puts "\e[31mUsage: asc sub-group-submissions <group_id|group_name>\e[0m"
+          exit 1
+        end
+
+        group = find_subscription_group!(@options.join(' '))
+        submissions = client.subscription_group_submissions(group_id: group['id'])
+
+        if submissions.empty?
+          puts "\e[33mNo submissions found for #{subscription_group_label(group)}.\e[0m"
+          return
+        end
+
+        puts "\e[1mSubscription Group Submissions\e[0m"
+        puts '=' * 50
+        puts "Group: #{subscription_group_label(group)} (#{group['id']})"
+        puts
+        submissions.each do |s|
+          puts "  ID: #{s[:id]}"
+          puts "    State: #{s[:state] || '(unknown)'}"
+          puts "    Created: #{s[:created_date] || '(unknown)'}"
+        end
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_submit_sub_group
+        if @options.empty?
+          puts "\e[31mUsage: asc submit-sub-group <group_id|group_name> [--yes]\e[0m"
+          exit 1
+        end
+
+        args = @options.dup
+        no_confirm = args.delete('--yes') || args.delete('--no-confirm')
+        group = find_subscription_group!(args.join(' '))
+
+        unless no_confirm
+          puts "\e[1mSubmit Subscription Group\e[0m"
+          puts '=' * 50
+          puts "  Group: #{subscription_group_label(group)} (#{group['id']})"
+          puts '  This will submit the subscription group for review.'
+          print "\e[33mProceed? (y/N): \e[0m"
+          confirm = $stdin.gets&.strip&.downcase
+          return unless confirm == 'y'
+        end
+
+        result = client.submit_subscription_group(group_id: group['id'])
+        puts "\e[32mSubscription group submitted!\e[0m"
+        puts "  Submission ID: #{result[:id]}"
+        puts "  State: #{result[:state] || '(unknown)'}"
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
+      def cmd_sub_group_localizations
+        if @options.empty?
+          puts "\e[31mUsage: asc sub-group-localizations <group_id|group_name>\e[0m"
+          exit 1
+        end
+
+        group = find_subscription_group!(@options.join(' '))
+        locs = client.subscription_group_localizations(group_id: group['id'])
+
+        if locs.empty?
+          puts "\e[33mNo localizations found for #{subscription_group_label(group)}.\e[0m"
+          return
+        end
+
+        puts "\e[1mSubscription Group Localizations\e[0m"
+        puts '=' * 50
+        puts "Group: #{subscription_group_label(group)} (#{group['id']})"
+        puts
+        locs.each do |loc|
+          puts "  #{loc[:locale]}: #{loc[:name]}"
+          puts "    ID: #{loc[:id]}"
+        end
+      rescue ApiError => e
+        puts "\e[31mError: #{e.message}\e[0m"
+      end
+
       def cmd_sub_details
         puts "\e[1mSubscription Details\e[0m"
         puts '=' * 50
@@ -1679,8 +1779,8 @@ module AppStoreConnect
         end
 
         begin
-          timeout = Integer(timeout, 10)
-          interval = Integer(interval, 10)
+          timeout = Integer(timeout)
+          interval = Integer(interval)
         rescue ArgumentError, TypeError
           puts "\e[31m--timeout and --interval must be integers (seconds).\e[0m"
           exit 1
@@ -2136,6 +2236,27 @@ module AppStoreConnect
 
       def subscription_group_label(group)
         subscription_group_name(group) || group['id']
+      end
+
+      def find_subscription_group!(id_or_name)
+        value = (id_or_name || '').strip
+        if value.empty?
+          puts "\e[31mMissing subscription group identifier.\e[0m"
+          exit 1
+        end
+
+        groups = client.subscription_groups
+
+        group = groups.find { |g| g['id'] == value }
+        group ||= groups.find { |g| subscription_group_name(g)&.casecmp?(value) }
+
+        unless group
+          puts "\e[31mSubscription group not found: #{value}\e[0m"
+          print_subscription_groups(groups)
+          exit 1
+        end
+
+        group
       end
 
       def print_subscription_groups(groups)

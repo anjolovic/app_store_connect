@@ -170,15 +170,32 @@ module AppStoreConnect
 
       # Get subscription images
       def subscription_images(subscription_id:)
-        get("/subscriptions/#{subscription_id}/subscriptionImages")['data'].map do |image|
+        data =
+          begin
+            get("/subscriptions/#{subscription_id}/images")['data']
+          rescue ApiError => e
+            # Older/alternate API path
+            if e.message.include?('Not found')
+              get("/subscriptions/#{subscription_id}/subscriptionImages")['data']
+            else
+              raise
+            end
+          end
+
+        (data || []).map do |image|
           {
             id: image['id'],
             file_name: image.dig('attributes', 'fileName'),
             file_size: image.dig('attributes', 'fileSize'),
-            upload_state: image.dig('attributes', 'assetDeliveryState', 'state'),
+            upload_state: image.dig('attributes', 'state') || image.dig('attributes', 'assetDeliveryState', 'state'),
             source_file_checksum: image.dig('attributes', 'sourceFileChecksum')
           }
         end
+      rescue ApiError => e
+        # If neither path is available, treat as "no images" to avoid blocking metadata checks.
+        return [] if e.message.include?('Not found')
+
+        raise
       end
 
       # Get a specific subscription image by ID
@@ -190,7 +207,7 @@ module AppStoreConnect
           id: image['id'],
           file_name: image.dig('attributes', 'fileName'),
           file_size: image.dig('attributes', 'fileSize'),
-          upload_state: image.dig('attributes', 'assetDeliveryState', 'state'),
+          upload_state: image.dig('attributes', 'state') || image.dig('attributes', 'assetDeliveryState', 'state'),
           source_file_checksum: image.dig('attributes', 'sourceFileChecksum')
         }
       rescue ApiError => e
@@ -210,8 +227,7 @@ module AppStoreConnect
                                type: 'subscriptionImages',
                                attributes: {
                                  fileName: file_name,
-                                 fileSize: file_size,
-                                 sourceFileChecksum: checksum
+                                 fileSize: file_size
                                },
                                relationships: {
                                  subscription: {
@@ -354,6 +370,14 @@ module AppStoreConnect
                   id: tax_category_id
                 }
               })
+      rescue ApiError => e
+        if e.message.include?('Not found')
+          raise ApiError,
+                'Tax category is not available via ASC API for this account (endpoint returned 404). ' \
+                'Set tax category in App Store Connect UI.'
+        end
+
+        raise
       end
 
       # List available tax categories
@@ -405,6 +429,52 @@ module AppStoreConnect
           id: rel['id'],
           name: included&.dig('attributes', 'name')
         }
+      end
+
+      # Submit a subscription group for review
+      def submit_subscription_group(group_id:)
+        result = post('/subscriptionGroupSubmissions', body: {
+                        data: {
+                          type: 'subscriptionGroupSubmissions',
+                          relationships: {
+                            subscriptionGroup: {
+                              data: { type: 'subscriptionGroups', id: group_id }
+                            }
+                          }
+                        }
+                      })['data']
+
+        {
+          id: result['id'],
+          state: result.dig('attributes', 'state'),
+          created_date: result.dig('attributes', 'createdDate')
+        }
+      end
+
+      # List submissions for a subscription group
+      def subscription_group_submissions(group_id:)
+        get("/subscriptionGroups/#{group_id}/subscriptionGroupSubmissions")['data'].map do |sub|
+          {
+            id: sub['id'],
+            state: sub.dig('attributes', 'state'),
+            created_date: sub.dig('attributes', 'createdDate')
+          }
+        end
+      end
+
+      # List subscription group localizations (name per locale)
+      def subscription_group_localizations(group_id:)
+        get("/subscriptionGroups/#{group_id}/subscriptionGroupLocalizations")['data'].map do |loc|
+          {
+            id: loc['id'],
+            locale: loc.dig('attributes', 'locale'),
+            name: loc.dig('attributes', 'name')
+          }
+        end
+      rescue ApiError => e
+        return [] if e.message.include?('Not found')
+
+        raise
       end
 
       # Create an introductory offer for a subscription

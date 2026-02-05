@@ -26,6 +26,7 @@ module AppStoreConnect
             session           Check session status for Resolution Center
             review-info       Show review contact info and notes
             subs              List subscription products
+            sub-groups         List subscription groups
             sub-details       Detailed subscription info with localizations
             sub-metadata-status Show missing metadata checklist for subscriptions
             sub-availability  Show subscription availability territories
@@ -35,6 +36,8 @@ module AppStoreConnect
             sub-review-screenshot  Show subscription review screenshot
             sub-localizations List subscription localizations
             sub-intro-offers  List subscription introductory offers
+            sub-group-submissions Show subscription group submissions
+            sub-group-localizations List subscription group localizations
             iaps              List in-app purchases
             iap-details       Detailed IAP info with localizations
             version-info      Show version localizations (description, what's new)
@@ -68,6 +71,7 @@ module AppStoreConnect
             update-sub-note <id> "note"           Update subscription review note
             fix-sub-metadata <id> [options]       Add missing subscription metadata
             sub-ensure-assets [options]           Upload missing subscription assets for all subs
+            submit-sub-group <group> [--yes]      Submit subscription group for review
             set-sub-availability <id> <territories...>  Set subscription availability (requires --available-in-new-territories on first set)
             add-sub-price <id> <price_point_id>   Add subscription price schedule
             upload-sub-image <id> <file>          Upload subscription image (1024x1024)

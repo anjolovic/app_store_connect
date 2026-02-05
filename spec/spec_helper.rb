@@ -48,6 +48,10 @@ RSpec.configure do |config|
     $ERROR_INFO = nil
   end
 
+  config.after(:suite) do
+    $ERROR_INFO = nil
+  end
+
 end
 
 # Helper to stub App Store Connect API responses

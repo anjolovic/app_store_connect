@@ -700,6 +700,31 @@ RSpec.describe AppStoreConnect::CLI do
         expect { cli.run }.to output(/TAX001/).to_stdout
       end
 
+      it 'submits a subscription group for review' do
+        stub_api_get(
+          '/apps/123456789/subscriptionGroups',
+          response_body: {
+            data: [
+              { id: 'group1', type: 'subscriptionGroups', attributes: { referenceName: 'Plans' } }
+            ]
+          }
+        )
+        stub_api_post(
+          '/subscriptionGroupSubmissions',
+          response_body: {
+            data: {
+              id: 'sgs1',
+              type: 'subscriptionGroupSubmissions',
+              attributes: { state: 'WAITING_FOR_REVIEW' }
+            }
+          }
+        )
+
+        cli = described_class.new(['submit-sub-group', 'Plans', '--yes'])
+
+        expect { cli.run }.to output(/Subscription group submitted!/).to_stdout
+      end
+
       it 'outputs dry-run json for sub-ensure-assets with only missing subscriptions' do
         review_file = Tempfile.new(['review', '.png'])
         image_file = Tempfile.new(['image', '.png'])
@@ -729,14 +754,14 @@ RSpec.describe AppStoreConnect::CLI do
         )
 
         stub_api_get('/subscriptions/sub1/appStoreReviewScreenshot', response_body: sample_error_response(title: 'Not found'), status: 404)
-        stub_api_get('/subscriptions/sub1/subscriptionImages', response_body: { data: [] })
+        stub_api_get('/subscriptions/sub1/images', response_body: { data: [] })
 
         stub_api_get(
           '/subscriptions/sub2/appStoreReviewScreenshot',
           response_body: { data: { id: 'shot_ok', type: 'subscriptionAppStoreReviewScreenshots', attributes: { fileName: 'ok.png', fileSize: 123, assetDeliveryState: { state: 'COMPLETE' } } } }
         )
         stub_api_get(
-          '/subscriptions/sub2/subscriptionImages',
+          '/subscriptions/sub2/images',
           response_body: { data: [{ id: 'img_ok', type: 'subscriptionImages', attributes: { fileName: 'ok.png', fileSize: 123, assetDeliveryState: { state: 'COMPLETE' } } }] }
         )
 
@@ -749,7 +774,7 @@ RSpec.describe AppStoreConnect::CLI do
                                    '--json'
                                  ])
 
-        expect { cli.run }.to output(/"product_id": "com\\.example\\.app\\.plan\\.missing"/).to_stdout
+        expect { cli.run }.to output(/"product_id": "com\.example\.app\.plan\.missing"/).to_stdout
       ensure
         review_file.close
         review_file.unlink
@@ -785,7 +810,7 @@ RSpec.describe AppStoreConnect::CLI do
         )
 
         stub_api_get('/subscriptions/sub1/appStoreReviewScreenshot', response_body: sample_error_response(title: 'Not found'), status: 404)
-        stub_api_get('/subscriptions/sub1/subscriptionImages', response_body: { data: [] })
+        stub_api_get('/subscriptions/sub1/images', response_body: { data: [] })
 
         stub_api_post(
           '/subscriptionAppStoreReviewScreenshots',
@@ -932,6 +957,7 @@ RSpec.describe AppStoreConnect::CLI do
         sub-review-screenshot upload-sub-review-screenshot delete-sub-review-screenshot
         set-sub-tax-category tax-categories sub-localizations update-sub-localization
         sub-intro-offers delete-sub-intro-offer
+        sub-groups sub-group-submissions submit-sub-group sub-group-localizations
       ]
 
       expected_commands.each do |cmd|
