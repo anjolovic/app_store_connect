@@ -460,6 +460,12 @@ module AppStoreConnect
             created_date: sub.dig('attributes', 'createdDate')
           }
         end
+      rescue ApiError => e
+        # Some accounts do not expose this relationship endpoint (404). Treat it
+        # as unsupported/none so the CLI can continue.
+        return [] if e.message.include?('Not found')
+
+        raise
       end
 
       # List subscription group localizations (name per locale)

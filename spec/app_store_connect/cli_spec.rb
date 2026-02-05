@@ -725,6 +725,26 @@ RSpec.describe AppStoreConnect::CLI do
         expect { cli.run }.to output(/Subscription group submitted!/).to_stdout
       end
 
+      it 'treats missing sub-group-submissions endpoint as none/unsupported' do
+        stub_api_get(
+          '/apps/123456789/subscriptionGroups',
+          response_body: {
+            data: [
+              { id: 'group1', type: 'subscriptionGroups', attributes: { referenceName: 'Plans' } }
+            ]
+          }
+        )
+        stub_api_get(
+          '/subscriptionGroups/group1/subscriptionGroupSubmissions',
+          response_body: sample_error_response(title: 'Not found'),
+          status: 404
+        )
+
+        cli = described_class.new(['sub-group-submissions', 'Plans'])
+
+        expect { cli.run }.to output(/No submissions found/).to_stdout
+      end
+
       it 'outputs dry-run json for sub-ensure-assets with only missing subscriptions' do
         review_file = Tempfile.new(['review', '.png'])
         image_file = Tempfile.new(['image', '.png'])

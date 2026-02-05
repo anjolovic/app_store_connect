@@ -597,6 +597,34 @@ RSpec.describe AppStoreConnect::Client do
         )
       end
     end
+
+    context 'when API returns a structured 409 error' do
+      before do
+        stub_api_get(
+          '/apps',
+          response_body: {
+            errors: [
+              {
+                status: '409',
+                code: 'ENTITY_ERROR.SUBSCRIPTION_GROUP_SUBMISSION_NOT_ALLOWED',
+                title: 'Entity Error',
+                detail: 'Submission not allowed.',
+                source: { pointer: '/data/relationships/subscriptionGroup' },
+                meta: { reason: 'missing_iaps' }
+              }
+            ]
+          },
+          status: 409
+        )
+      end
+
+      it 'includes code/pointer/meta in the error message' do
+        expect { client.apps }.to raise_error(
+          AppStoreConnect::ApiError,
+          /ENTITY_ERROR\.SUBSCRIPTION_GROUP_SUBMISSION_NOT_ALLOWED/
+        )
+      end
+    end
   end
 
   describe '#generate_token' do

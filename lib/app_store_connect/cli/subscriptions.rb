@@ -2533,17 +2533,6 @@ module AppStoreConnect
           checks[:image] = { status: 'unknown', error: e.message }
         end
 
-        begin
-          tax_category = client.subscription_tax_category(subscription_id: subscription_id)
-          checks[:tax_category] = if tax_category.nil?
-                                    { status: 'unset' }
-                                  else
-                                    { status: 'ok', id: tax_category[:id], name: tax_category[:name] }
-                                  end
-        rescue ApiError => e
-          checks[:tax_category] = { status: 'unknown', error: e.message }
-        end
-
         checks
       end
 
@@ -2608,17 +2597,6 @@ module AppStoreConnect
           lines << 'Image: None (optional unless using offers/promotions)'
         else
           lines << "Image: Unknown (#{img[:error]})"
-        end
-
-        tax = checks[:tax_category]
-        case tax[:status]
-        when 'ok'
-          label = tax[:name] || tax[:id]
-          lines << "Tax Category: OK (#{label})"
-        when 'unset'
-          lines << 'Tax Category: Not set (set in App Store Connect UI if required)'
-        else
-          lines << "Tax Category: Unavailable (#{tax[:error]})"
         end
 
         lines

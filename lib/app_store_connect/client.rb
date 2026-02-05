@@ -584,12 +584,35 @@ module AppStoreConnect
     end
 
     def handle_error_response(result, status_code, path)
-      detail = if result.is_a?(Hash) && result['errors'].is_a?(Array) && result['errors'].any?
-                 error = result['errors'].first
+      error = if result.is_a?(Hash) && result['errors'].is_a?(Array) && result['errors'].any?
+                result['errors'].first
+              end
+
+      detail = if error
                  error['detail'] || error['title'] || 'Unknown error'
                else
                  "HTTP #{status_code}"
                end
+
+      # Improve visibility of Apple's structured error fields. This helps debug
+      # 409/ENTITY_ERROR and similar cases where detail alone is insufficient.
+      error_extras = []
+      if error
+        code = error['code']
+        pointer = error.dig('source', 'pointer')
+        parameter = error.dig('source', 'parameter')
+        meta = error['meta']
+
+        error_extras << "code=#{code}" if code
+        error_extras << "pointer=#{pointer}" if pointer
+        error_extras << "parameter=#{parameter}" if parameter
+        if meta.is_a?(Hash) && meta.any?
+          meta_str = meta.map { |k, v| "#{k}=#{v}" }.join(', ')
+          error_extras << "meta={#{meta_str}}"
+        end
+      end
+
+      detail = "#{detail} (#{error_extras.join(' ')})" if error_extras.any?
 
       case status_code
       when 401
@@ -597,7 +620,7 @@ module AppStoreConnect
       when 403
         raise ApiError, 'Forbidden - your API key may not have the required permissions'
       when 404
-        raise ApiError, "Not found - resource doesn't exist: #{path}"
+        raise ApiError, "Not found - resource doesn't exist: #{path}#{error_extras.any? ? " (#{error_extras.join(' ')})" : ''}"
       when 429
         raise ApiError, 'Rate limited - too many requests'
       else
